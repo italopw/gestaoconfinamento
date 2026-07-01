@@ -451,7 +451,7 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     
                     if (filteredData.length > 0) {
                         let totalPrevisto = 0, totalRealizado = 0, totalDesvioAbsoluto = 0;
-                        const statusCount = { VERDE: 0, AMARELO: 0, VERMELHO: 0 };
+                        const statusCount = { VERDE: 0, AMARELO: 0, VERMELHO: 0, PRETO: 0 };
                         const operadores = {}, itens = {};
 
                         filteredData.forEach(row => {
@@ -653,6 +653,24 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                 saveEstoqueAvulso: () => { 
                     App.state.salvo = true; App.render(); 
                     setTimeout(() => { App.state.salvo = false; App.render(); }, 3000); 
+                },
+                updateEstoqueField: (rowId, field, val) => {
+                    // Encontrar o registro na parsed.estoque e atualizar valores
+                    const parsed = App.state.parsed.estoque || [];
+                    const idx = parsed.findIndex(r => r._id === rowId);
+                    if (idx === -1) return;
+                    const row = parsed[idx];
+                    const num = Number(String(val).replace(',', '.')) || 0;
+                    if (field === '_estoque') row._estoque = num;
+                    if (field === '_consumoReal') row._consumoReal = num;
+                    if (field === '_consumoProj') row._consumoProj = num;
+                    // Recalcular autonomias
+                    row._autonomiaReal = row._consumoReal > 0 ? Math.floor(row._estoque / row._consumoReal) : 0;
+                    row._autonomiaProj = row._consumoProj > 0 ? Math.floor(row._estoque / row._consumoProj) : 0;
+                    App.state.parsed.estoque[idx] = row;
+                    // Re-renderizar
+                    App.calculateDerived();
+                    App.render();
                 },
                 handleLogout: () => {
                     App.state.activeTab = 'dashboard';
@@ -1070,15 +1088,15 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 lg:col-span-1">
                             <div class="flex items-center space-x-2 mb-6"><i data-lucide="check-circle" class="text-green-500 w-5 h-5"></i><h3 class="text-lg font-semibold">Status das Cargas</h3></div>
                             <div class="space-y-4">
-                                ${['VERDE', 'AMARELO', 'VERMELHO'].map(s => `
+                                ${['VERDE', 'AMARELO', 'VERMELHO', 'PRETO'].map(s => `
                                     <div>
                                         <div class="flex justify-between text-sm mb-1">
-                                            <span class="font-medium ${s==='VERDE'?'text-green-700':s==='AMARELO'?'text-yellow-600':'text-red-600'}">${s==='VERDE'?'Dentro da Meta':s==='AMARELO'?'Atenção':'Fora da Meta'} (${s})</span>
+                                                <span class="font-medium ${s==='VERDE'?'text-green-700':s==='AMARELO'?'text-yellow-600':s==='VERMELHO'?'text-red-600':'text-gray-900'}">${s==='VERDE'?'Dentro da Meta':s==='AMARELO'?'Atenção':s==='VERMELHO'?'Fora da Meta':'Crítico'} (${s})</span>
                                             <span class="font-bold">${st.statusCount[s]}</span>
                                         </div>
-                                        <div class="w-full bg-gray-100 rounded-full h-3">
-                                            <div class="${s==='VERDE'?'bg-green-500':s==='AMARELO'?'bg-yellow-400':'bg-red-500'} h-3 rounded-full" style="width: ${(st.statusCount[s] / st.totalRegistros) * 100}%"></div>
-                                        </div>
+                                            <div class="w-full bg-gray-100 rounded-full h-3">
+                                                <div class="${s==='VERDE'?'bg-green-500':s==='AMARELO'?'bg-yellow-400':s==='VERMELHO'?'bg-red-500':'bg-black'} h-3 rounded-full" style="width: ${(st.statusCount[s] / st.totalRegistros) * 100}%"></div>
+                                            </div>
                                     </div>`).join('')}
                             </div>
                         </div>
@@ -1186,7 +1204,7 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     </tr>`).join('');
 
                 let mainTableHtml = st.itens.map(i => {
-                    const isZ = i._autonomiaReal === 0 || i._estoque === 0;
+                        const isZ = i._autonomiaReal === 0 || i._estoque === 0;
                     const isL = !isZ && i._autonomiaReal < 15;
                     const cRow = isL ? 'bg-[#fce4d6]' : 'bg-white hover:bg-gray-50';
                     const cTxt = isZ ? 'text-red-600' : 'text-gray-900';
@@ -1194,11 +1212,21 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                         <tr class="border-b transition-colors ${cRow} ${cTxt}">
                             <td class="px-4 py-2 border-r border-gray-200">${i.Produto}</td>
                             <td class="px-4 py-2 border-r border-gray-200 font-medium">${i.Descrição}</td>
-                            <td class="px-4 py-2 border-r border-gray-200">${i._estoque.toLocaleString('pt-BR')}</td>
-                            <td class="px-4 py-2 border-r border-gray-200 font-bold">${i._consumoReal.toLocaleString('pt-BR')}</td>
-                            <td class="px-4 py-2 border-r border-gray-200">${i._autonomiaReal}</td>
-                            <td class="px-4 py-2 border-r border-gray-200 font-bold">${i._consumoProj.toLocaleString('pt-BR')}</td>
-                            <td class="px-4 py-2">${i._autonomiaProj}</td>
+                            <td class="px-4 py-2 border-r border-gray-200">
+                                <input type="number" class="w-32 text-right bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-none shadow-sm" value="${i._estoque}" onchange="App.actions.updateEstoqueField('${i._id}','_estoque', this.value)">
+                            </td>
+                            <td class="px-4 py-2 border-r border-gray-200 font-bold">
+                                <input type="number" class="w-28 text-right bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-none shadow-sm" value="${i._consumoReal}" onchange="App.actions.updateEstoqueField('${i._id}','_consumoReal', this.value)">
+                            </td>
+                            <td class="px-4 py-2 border-r border-gray-200">
+                                <input type="number" class="w-20 text-center bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-none shadow-sm" value="${i._autonomiaReal}" readonly>
+                            </td>
+                            <td class="px-4 py-2 border-r border-gray-200 font-bold">
+                                <input type="number" class="w-28 text-right bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-none shadow-sm" value="${i._consumoProj}" onchange="App.actions.updateEstoqueField('${i._id}','_consumoProj', this.value)">
+                            </td>
+                            <td class="px-4 py-2">
+                                <input type="number" class="w-20 text-center bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-none shadow-sm" value="${i._autonomiaProj}" readonly>
+                            </td>
                         </tr>`;
                 }).join('');
 
@@ -1368,7 +1396,7 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                         <th class="px-4 py-3 text-center">Status</th>
                     </tr>`;
                     tbodyHtml = data.map(r => {
-                        const sc = r.Status === 'VERDE' ? 'bg-green-100 text-green-800' : r.Status === 'AMARELO' ? 'bg-yellow-100 text-yellow-800' : r.Status === 'VERMELHO' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800';
+                        const sc = r.Status === 'VERDE' ? 'bg-green-100 text-green-800' : r.Status === 'AMARELO' ? 'bg-yellow-100 text-yellow-800' : r.Status === 'VERMELHO' ? 'bg-red-100 text-red-800' : r.Status === 'PRETO' ? 'bg-black text-white' : 'bg-gray-100 text-gray-800';
                         return `
                             <tr class="border-b hover:bg-gray-50 transition-colors">
                                 <td class="px-4 py-3"><div class="font-medium">${r.Data}</div><div class="text-xs text-gray-500">${r.Hora}</div></td>
