@@ -1435,6 +1435,10 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
         // ==========================================
         // 7. INICIALIZAR A APLICAÇÃO
         // ==========================================
+        // Tornar acessível a partir do escopo global para handlers inline
+        window.App = App;
+        window.FirebaseService = FirebaseService;
+
         window.onload = function() { App.init(); };
 
     </script>
