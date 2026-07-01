@@ -1,0 +1,1389 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Farmtell Beef Analytics</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Firebase é inicializado em um módulo separado abaixo
+    </script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        
+        /* Hide number input arrows */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-50 font-sans text-gray-800 pb-12">
+    <div id="app"></div>
+    <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full mx-4">
+            <div class="text-center mb-6">
+                <h1 class="text-2xl font-bold text-green-700 mb-2">Farmtell Beef Analytics</h1>
+                <p class="text-gray-600">Acesse sua conta para continuar</p>
+            </div>
+            <div id="auth-loading" class="hidden text-center mb-4">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-700"></div>
+                <p class="text-gray-600 mt-2">Autenticando...</p>
+            </div>
+            <button id="google-login-btn" class="w-full bg-white border-2 border-gray-300 text-gray-700 py-3 px-4 rounded-lg font-semibold hover:bg-gray-50 transition flex items-center justify-center gap-2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                Entrar com Google
+            </button>
+            <div id="auth-error" class="mt-4 p-3 bg-red-100 text-red-700 rounded hidden"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        // ==========================================
+        // 0. FIREBASE INITIALIZATION & AUTH
+        // ==========================================
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, setDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+
+        // Firebase Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyBe-R_7RcO4q34u9jrR4SXoOtfTppQ25FA",
+            authDomain: "integracaocoi.firebaseapp.com",
+            projectId: "integracaocoi",
+            storageBucket: "integracaocoi.firebasestorage.app",
+            messagingSenderId: "177203745489",
+            appId: "1:177203745489:web:62e7ba43f72d7d29032bf0",
+            measurementId: "G-XB493Q9S95"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const provider = new GoogleAuthProvider();
+
+        // ==========================================
+        // 0.1 FIREBASE AUTH FUNCTIONS
+        // ==========================================
+        let currentUser = null;
+
+        const FirebaseService = {
+            // Fazer login com Google
+            signInWithGoogle: async () => {
+                try {
+                    document.getElementById('auth-loading').classList.remove('hidden');
+                    document.getElementById('auth-error').classList.add('hidden');
+                    const result = await signInWithPopup(auth, provider);
+                    currentUser = result.user;
+                    return result.user;
+                } catch (error) {
+                    console.error('Erro ao fazer login:', error);
+                    document.getElementById('auth-error').textContent = 'Erro ao fazer login: ' + error.message;
+                    document.getElementById('auth-error').classList.remove('hidden');
+                    throw error;
+                } finally {
+                    document.getElementById('auth-loading').classList.add('hidden');
+                }
+            },
+
+            // Fazer logout
+            signOut: async () => {
+                try {
+                    await signOut(auth);
+                    currentUser = null;
+                    App.handleLogout();
+                } catch (error) {
+                    console.error('Erro ao fazer logout:', error);
+                }
+            },
+
+            // Salvar dados no Firestore
+            saveData: async (dataType, data, localidade) => {
+                if (!currentUser) {
+                    console.error('Usuário não autenticado');
+                    return;
+                }
+                try {
+                    const docRef = doc(db, `gestao_confinamento/${currentUser.uid}/dados/${dataType}_${localidade}_${Date.now()}`);
+                    await setDoc(docRef, {
+                        tipo: dataType,
+                        localidade: localidade,
+                        dados: data,
+                        dataSalvo: new Date(),
+                        usuario: currentUser.email
+                    });
+                    return true;
+                } catch (error) {
+                    console.error('Erro ao salvar dados:', error);
+                    return false;
+                }
+            },
+
+            // Carregar dados do Firestore
+            loadData: async (dataType) => {
+                if (!currentUser) {
+                    console.error('Usuário não autenticado');
+                    return [];
+                }
+                try {
+                    const q = query(collection(db, `gestao_confinamento/${currentUser.uid}/dados`), 
+                                    where("tipo", "==", dataType));
+                    const querySnapshot = await getDocs(q);
+                    const results = [];
+                    querySnapshot.forEach((doc) => {
+                        results.push(doc.data());
+                    });
+                    return results;
+                } catch (error) {
+                    console.error('Erro ao carregar dados:', error);
+                    return [];
+                }
+            }
+        };
+
+        // Setup Auth UI
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('auth-modal').classList.add('hidden');
+                document.body.style.overflow = 'auto';
+            } else {
+                currentUser = null;
+                document.getElementById('auth-modal').classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            }
+        });
+
+        document.getElementById('google-login-btn')?.addEventListener('click', FirebaseService.signInWithGoogle);
+
+        // ==========================================
+        // 1. DADOS DE EXEMPLO (MOCK DATA)
+        // ==========================================
+        const MOCK_CARREGAMENTO = `Localidade\tData\tHora\tPazeiro\tVagão\tDieta\tNro Carregamento\tIngrediente\tTipo Ingrediente\tCarregado (kg)\tPrevisto (kg)\tDesvio (kg)\tDesvio (%)\tStatus
+CRISTO REI\t08/06/2026\t10:00:00\tWILLAS SOARES\t90615 - CASALE\tTERMINAÇÃO 1\t1000\tDDG S - 121004\tVagão\t52000,00\t52000,00\t0,00\t0,00%\tVERDE
+CRISTO REI\t08/06/2026\t11:00:00\tWILLAS SOARES\t90615 - CASALE\tTERMINAÇÃO 1\t1000\t027 - Silagem brachiaria\tVagão\t32000,00\t32000,00\t0,00\t0,00%\tVERDE
+CRISTO REI\t15/06/2026\t14:02:51\tWILLAS SOARES\t90615 - CASALE\tTERMINAÇÃO 1 2026 S5\t1001\tDDG S - 121004\tVagão\t48000,00\t48000,00\t0,00\t0,00%\tVERDE
+CRISTO REI\t15/06/2026\t14:02:51\tWILLAS SOARES\t90615 - CASALE\tTERMINAÇÃO 1 2026 S5\t1001\t027 - Silagem brachiaria\tVagão\t31000,00\t31000,00\t0,00\t0,00%\tVERDE
+CRISTO REI\t16/06/2026\t14:15:00\tJOAO SILVA\t90615 - CASALE\tTERMINAÇÃO 1 2026 S5\t1002\tMILHO MOIDO - 005\tVagão\t12000,00\t12000,00\t50,00\t0,00%\tVERDE
+HELIO TORO\t16/06/2026\t14:30:22\tWILLAS SOARES\t90616 - CASALE\tCRESCIMENTO 2\t1003\tSOJA\tVagão\t450,00\t500,00\t-50,00\t-10,00%\tVERMELHO`;
+
+        const MOCK_DISTRIBUICAO = `Localidade\tData\tHora\tTrato\tTratador\tVagão\tCurral\tDieta\tPlano Alimentar (%)\tLote\tDistribuído (kg)\tPrevisto (kg)\tDesvio (kg)\tDesvio (%)\tStatus
+HELIO TORO\t15/06/2026\t09:43:35\tTrato 1\tPAULO HENRIQUE\t90817 - CASALE 270\t149.1\tDIETA SEMI 2 2026\t54.2\tSEMI 2026-269\t697\t695\t2\t0,29%\tVERDE
+CRISTO REI\t16/06/2026\t10:15:00\tTrato 1\tMARCOS LIMA\t90817 - CASALE 270\t150.2\tCONF. PASTO S\t100\tCRESC 2026-101\t1200\t1000\t200\t20,00%\tAMARELO
+SANTA MARIA\t17/06/2026\t11:00:22\tTrato 2\tPAULO HENRIQUE\t90818 - CASALE 270\t151.3\tTERMINAÇÃO 1 2026\t100\tTERM 2026-055\t1500\t1000\t500\t50,00%\tVERMELHO`;
+
+        const MOCK_OCORRENCIAS = `Localidade\tData Ocorrência\tTitulo\tOcorrência
+CRISTO REI\t15 - 16 - 17/06/2026\tDOIS TRATORES QUEBRADOS\tDois tratotes quebraram, impactando a rotina de trato do confinamento. Parte dos tratos precisou ser realizado via fichas manuais. Responsáveis pelas informações: Matheus da Silva e Marimarcio.
+CRISTO REI\t20/06/2026\tTRATO ATRASADO\tPá carregadeira atolou durante o carregamento de Silagem de Brachiaria para o trato 1 do confinamento da Cristo Rei. Equipe atuando para poder finalizar a operação. Responsáveis pela informação: Willas Oliveira e Thiago Alves.
+CRISTO REI\t20/06/2026\tFALHA NO CARREGAMENTO DE SILAGEM\tDevido ao atolamento da pá, os operadores jogaram uma concha do produto no vagão e seguiram para os próximos insumos para reduzir o atraso do trato. Faltaram 1.660 Kg de silagem. Este problema causou a falta de produto durante a distribuição do trato da linha B. Curral B-10 só teve 50 Kg para jogar. B-11 e B-12 não foi possível tratar. Responsável pela informação: Willas Oliveira.
+HELIO TORO\t15/06/2026\tDISTRIBUIÇÃO SEM LOTE VINCULADO\tMódulos 149.1 // 152.1 // 152.4 na automação da linha Helio Toro correspondiam fisicamente aos módulos 154.2 // 163.3 // 163.4 da localidade Santa Maria. Como a operação iniciou o processo antes do PCA terminar de realizar as movimentações desses módulos, o trato foi distribuído sem vinculo, dessa forma sendo necessário excluir os dados e lançar manualmente novamente para que constasse 100% de aderência ao trato 1. Responsáveis pelas informações: Op. Paulo Henrique; Letícia Nunes; Leonardo Dias.`;
+
+        const MOCK_ESTOQUE = `Localidade\tProduto\tDescrição\tEstoque Atual (kg)\tConsumo Diário Real (kg)\tConsumo Diário Projetado (kg)
+CRISTO REI\t27\tSILAGEM DE BRACHIARIA\t10583128,00\t31068,00\t34648,00
+CRISTO REI\t120794\tDDG OURO\t0,00\t48784,00\t56868,00
+CRISTO REI\t5\tMILHETO EM GRAOS\t157192,00\t13574,00\t12040,00
+CRISTO REI\t111357\tNUCLEO MINERAL IMPACTO PRO BAG\t15877,00\t516,00\t1367,00
+CRISTO REI\t112844\tNUCLEO MINERAL RUMITECH BEEF 2025\t38581,00\t1284,00\t1166,00
+CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
+
+        // ==========================================
+        // 2. ESTADO GLOBAL DA APLICAÇÃO
+        // ==========================================
+        const App = {
+            state: {
+                activeTab: 'dashboard',
+                activeView: 'carregamento',
+                
+                raw: {
+                    carregamento: MOCK_CARREGAMENTO,
+                    distribuicao: MOCK_DISTRIBUICAO,
+                    ocorrencias: MOCK_OCORRENCIAS,
+                    estoque: MOCK_ESTOQUE
+                },
+                
+                parsed: {
+                    carregamento: [],
+                    distribuicao: [],
+                    ocorrencias: [],
+                    estoque: []
+                },
+                
+                error: '',
+                salvo: false,
+                
+                estoqueAvulsoData: [
+                    { categoria: '', codigo: '61038', descricao: 'MILHO EM GRAOS ADQUIRIDO TERCEIROS', quantidade: 677373 },
+                    { categoria: '', codigo: '14', descricao: 'SILAGEM DE MILHETO', quantidade: 9622970 },
+                    { categoria: '', codigo: '121997', descricao: 'RACAO FORMULADA TROPA AGROCERES 2026', quantidade: 6000 },
+                    { categoria: '', codigo: '3261', descricao: 'UREIA AGRICOLA', quantidade: 5930 },
+                    { categoria: '', codigo: '62563', descricao: 'SAL BRANCO CIMSAL', quantidade: 37221 },
+                    { categoria: '', codigo: '62174', descricao: 'MINERAL NOVANIS EQUINOS', quantidade: 150 },
+                    { categoria: '', codigo: '123778', descricao: 'RACAO FORMULADA MINERAL UREADO 2026', quantidade: 0 },
+                    { categoria: 'DDG OURO', codigo: '123781', descricao: 'RACAO FORMULADA PROTEICO ENERGETICO RECRIA BIG BAG 2026', quantidade: 10000 },
+                    { categoria: 'DDG S', codigo: '124618', descricao: 'RACAO FORMULADA PROTEINADO RECRIA BIG BAG 2026', quantidade: 5000 },
+                    { categoria: 'ETIQUETA AMARELA', codigo: '122818', descricao: 'RACAO FORMULADA PROTEINADO 2026 _V3 - ÚNICA', quantidade: 2000 },
+                    { categoria: '', codigo: '124618', descricao: 'RACAO FORMULADA PROTEINADO RECRIA BIG BAG 2026 - ÚNICA', quantidade: 5000 },
+                ],
+                
+                pcaProjections: [
+                    { ingrediente: 'DDG OURO', volume: 56868 },
+                    { ingrediente: 'DDG S', volume: 44755 },
+                    { ingrediente: 'IMPACTO', volume: 1367 },
+                    { ingrediente: 'MILHETO', volume: 12040 },
+                    { ingrediente: 'RUMITECH', volume: 1166 },
+                    { ingrediente: 'SILAGEM BRACHIARIA', volume: 34648 },
+                ],
+                
+                attachments: {},
+                
+                filters: { data: 'Todas', localidade: 'Todas', dieta: 'Todas', ingrediente: 'Todos' }
+            },
+            
+            derived: {},
+
+            // ==========================================
+            // 3. MÉTODOS UTILITÁRIOS E DE NEGÓCIO
+            // ==========================================
+            utils: {
+                parseNumberBR: (str) => {
+                    if (!str) return 0;
+                    const cleaned = str.toString().replace(/\./g, '').replace(',', '.').replace('%', '');
+                    const num = parseFloat(cleaned);
+                    return isNaN(num) ? 0 : num;
+                },
+                getISOWeekAndYear: (dateStr) => {
+                    const parts = dateStr.split('/');
+                    if(parts.length !== 3) return 'sem. 00';
+                    const date = new Date(parts[2], parts[1] - 1, parts[0]);
+                    date.setHours(0, 0, 0, 0);
+                    date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+                    const week1 = new Date(date.getFullYear(), 0, 4);
+                    const week = 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+                    return `sem. ${week}`;
+                }
+            },
+
+            init: function() {
+                this.processData(MOCK_CARREGAMENTO, 'carregamento');
+                this.processData(MOCK_DISTRIBUICAO, 'distribuicao');
+                this.processData(MOCK_OCORRENCIAS, 'ocorrencias');
+                this.processData(MOCK_ESTOQUE, 'estoque');
+                this.render();
+            },
+
+            processData: function(text, type) {
+                try {
+                    const lines = text.trim().split('\n');
+                    if (lines.length < 2) {
+                        this.state.error = 'Por favor, insira o cabeçalho e pelo menos uma linha de dados.';
+                        this.render();
+                        return;
+                    }
+
+                    const headers = lines[0].split('\t').map(h => h.trim());
+                    const data = [];
+                    
+                    for (let i = 1; i < lines.length; i++) {
+                        const values = lines[i].split('\t');
+                        if (values.length > 1) {
+                            let row = {};
+                            row._id = `row-${type}-${i}-${Math.random().toString(36).substr(2, 9)}`;
+
+                            headers.forEach((header, index) => {
+                                row[header] = values[index] ? values[index].trim() : '';
+                            });
+                            
+                            if (type === 'ocorrencias') {
+                                row.Data = row['Data Ocorrência'];
+                                const textoCompleto = row['Ocorrência'] || '';
+                                const matchResponsavel = textoCompleto.match(/(?:Responsáve(?:l|is) pelas? informaç(?:ão|ões)):?\s*(.*)/i);
+                                
+                                if (matchResponsavel) {
+                                    row._responsavel = matchResponsavel[1].replace(/\.$/, '').trim();
+                                    row._descricao = textoCompleto.substring(0, matchResponsavel.index).trim();
+                                } else {
+                                    row._responsavel = 'Não identificado';
+                                    row._descricao = textoCompleto;
+                                }
+                            } else if (type === 'estoque') {
+                                row._estoque = this.utils.parseNumberBR(row['Estoque Atual (kg)']);
+                                row._consumoReal = this.utils.parseNumberBR(row['Consumo Diário Real (kg)']);
+                                row._consumoProj = this.utils.parseNumberBR(row['Consumo Diário Projetado (kg)']);
+                                
+                                row.Produto = row['Produto'];
+                                row.Descrição = row['Descrição'];
+                                row.Ingrediente = row['Descrição'];
+                                
+                                row._autonomiaReal = row._consumoReal > 0 ? Math.floor(row._estoque / row._consumoReal) : 0;
+                                row._autonomiaProj = row._consumoProj > 0 ? Math.floor(row._estoque / row._consumoProj) : 0;
+                            } else {
+                                row._previsto = this.utils.parseNumberBR(row['Previsto (kg)']);
+                                row._desvioKg = this.utils.parseNumberBR(row['Desvio (kg)']);
+                                row._desvioPerc = this.utils.parseNumberBR(row['Desvio (%)']);
+                                
+                                if (type === 'carregamento') {
+                                    row._realizado = this.utils.parseNumberBR(row['Carregado (kg)']);
+                                } else {
+                                    row._realizado = this.utils.parseNumberBR(row['Distribuído (kg)']);
+                                }
+                            }
+                            data.push(row);
+                        }
+                    }
+                    
+                    this.state.parsed[type] = data;
+                    this.state.error = '';
+                    if(document.getElementById('app').innerHTML !== '') {
+                        this.state.activeTab = 'dashboard';
+                        this.render();
+                    }
+                } catch (err) {
+                    this.state.error = 'Erro ao processar os dados.';
+                    console.error(err);
+                    this.render();
+                }
+            },
+
+            calculateDerived: function() {
+                // 1. Tendência Derivada do Carregamento
+                let derivedTendencia = [];
+                const parsedCarregamento = this.state.parsed.carregamento;
+                if (parsedCarregamento && parsedCarregamento.length > 0) {
+                    const grouped = {};
+                    const uniqueDaysPerWeek = {};
+
+                    parsedCarregamento.forEach(row => {
+                        if (!row.Data || !row.Ingrediente) return;
+                        const week = this.utils.getISOWeekAndYear(row.Data);
+                        
+                        let code = '';
+                        let name = row.Ingrediente;
+                        const parts = row.Ingrediente.split('-');
+                        if (parts.length > 1) {
+                            const possibleCode = parts[parts.length - 1].trim();
+                            const possibleCode2 = parts[0].trim();
+                            if (!isNaN(possibleCode) && possibleCode.length > 0) {
+                                code = possibleCode;
+                                name = parts.slice(0, parts.length - 1).join('-').trim();
+                            } else if (!isNaN(possibleCode2) && possibleCode2.length > 0) {
+                                code = possibleCode2;
+                                name = parts.slice(1).join('-').trim();
+                            }
+                        }
+                        
+                        const key = name.toUpperCase();
+                        const loc = row.Localidade || 'Geral';
+
+                        if (!grouped[key]) {
+                            grouped[key] = { Produto: code, Descrição: name.toUpperCase(), Localidade: loc, semanasSum: {}, originalNames: new Set() };
+                        }
+                        if (!grouped[key].semanasSum[week]) grouped[key].semanasSum[week] = 0;
+                        
+                        grouped[key].semanasSum[week] += (row._realizado || 0);
+                        grouped[key].originalNames.add(row.Ingrediente);
+                        
+                        if (!uniqueDaysPerWeek[week]) uniqueDaysPerWeek[week] = new Set();
+                        uniqueDaysPerWeek[week].add(row.Data);
+                    });
+
+                    derivedTendencia = Object.values(grouped).map(item => {
+                        const result = {
+                            Localidade: item.Localidade, Produto: item.Produto, Descrição: item.Descrição,
+                            Ingrediente: Array.from(item.originalNames)[0], semanas: {}
+                        };
+                        Object.keys(item.semanasSum).forEach(week => {
+                            const totalKg = item.semanasSum[week];
+                            const globalDaysCount = uniqueDaysPerWeek[week].size;
+                            result.semanas[week] = globalDaysCount > 0 ? Math.round(totalKg / globalDaysCount) : 0;
+                        });
+                        return result;
+                    });
+                }
+
+                const view = this.state.activeView;
+                const rawCurrentData = 
+                    view === 'carregamento' ? this.state.parsed.carregamento : 
+                    view === 'distribuicao' ? this.state.parsed.distribuicao : 
+                    view === 'estoque' ? this.state.parsed.estoque : 
+                    view === 'tendencia' ? derivedTendencia : 
+                    this.state.parsed.ocorrencias;
+
+                // Opções de Filtro
+                const filterOptions = { datas: [], localidades: [], dietas: [], ingredientes: [] };
+                if (rawCurrentData && rawCurrentData.length > 0) {
+                    filterOptions.datas = ['Todas', ...Array.from(new Set(rawCurrentData.map(d => d.Data))).filter(Boolean).sort()];
+                    filterOptions.localidades = ['Todas', ...Array.from(new Set(rawCurrentData.map(d => d.Localidade))).filter(Boolean).sort()];
+                    filterOptions.dietas = ['Todas', ...Array.from(new Set(rawCurrentData.map(d => d.Dieta))).filter(Boolean).sort()];
+                    filterOptions.ingredientes = ['Todos', ...Array.from(new Set(rawCurrentData.map(d => d.Ingrediente))).filter(Boolean).sort()];
+                }
+
+                // Filtrar Dados
+                const f = this.state.filters;
+                const filteredData = rawCurrentData.filter(row => {
+                    const matchData = f.data === 'Todas' || row.Data === f.data;
+                    const matchLoc = f.localidade === 'Todas' || row.Localidade === f.localidade;
+                    if (view === 'ocorrencias') return matchData && matchLoc;
+                    if (view === 'estoque' || view === 'tendencia') {
+                        return f.ingrediente === 'Todos' || row.Ingrediente === f.ingrediente;
+                    }
+                    const matchDieta = f.dieta === 'Todas' || row.Dieta === f.dieta;
+                    const matchIng = f.ingrediente === 'Todos' || row.Ingrediente === f.ingrediente;
+                    return matchData && matchLoc && matchDieta && matchIng;
+                });
+
+                // Stats Carregamento / Distribuição
+                let stats = null;
+                if (view === 'carregamento' || view === 'distribuicao') {
+                    const tipoOperador = view === 'carregamento' ? 'Pazeiro' : 'Tratador';
+                    const tolerance = view === 'carregamento' ? 2 : 20;
+                    const tipoItem = view === 'carregamento' ? 'Ingrediente' : 'Dieta';
+                    
+                    if (filteredData.length > 0) {
+                        let totalPrevisto = 0, totalRealizado = 0, totalDesvioAbsoluto = 0;
+                        const statusCount = { VERDE: 0, AMARELO: 0, VERMELHO: 0 };
+                        const operadores = {}, itens = {};
+
+                        filteredData.forEach(row => {
+                            totalPrevisto += row._previsto;
+                            totalRealizado += row._realizado;
+                            totalDesvioAbsoluto += Math.abs(row._desvioKg);
+                            const status = row.Status ? row.Status.toUpperCase() : 'DESCONHECIDO';
+                            if (statusCount[status] !== undefined) statusCount[status]++;
+
+                            const opNome = row[tipoOperador] || 'Não Identificado';
+                            if (!operadores[opNome]) operadores[opNome] = { nome: opNome, operacoes: 0, desvioAbsolutoKg: 0, previstoKg: 0 };
+                            operadores[opNome].operacoes++;
+                            operadores[opNome].desvioAbsolutoKg += Math.abs(row._desvioKg);
+                            operadores[opNome].previstoKg += row._previsto;
+
+                            const itemNome = row[tipoItem] || 'Não Identificado';
+                            if (!itens[itemNome]) itens[itemNome] = { nome: itemNome, previstoKg: 0, realizadoKg: 0 };
+                            itens[itemNome].previstoKg += row._previsto;
+                            itens[itemNome].realizadoKg += row._realizado;
+                        });
+
+                        const rankingOperadores = Object.values(operadores).map(op => ({
+                            ...op, erroMedioPerc: op.previstoKg > 0 ? (op.desvioAbsolutoKg / op.previstoKg) * 100 : 0
+                        })).sort((a, b) => b.erroMedioPerc - a.erroMedioPerc);
+
+                        const analiseItens = Object.values(itens).map(i => {
+                            const diferencaKg = i.realizadoKg - i.previstoKg;
+                            return { ...i, diferencaKg, diferencaPerc: i.previstoKg > 0 ? (diferencaKg / i.previstoKg) * 100 : 0 };
+                        }).sort((a, b) => Math.abs(b.diferencaPerc) - Math.abs(a.diferencaPerc));
+
+                        stats = {
+                            totalPrevisto, totalRealizado, totalDesvioAbsoluto, 
+                            desvioGeralPerc: totalPrevisto > 0 ? (totalDesvioAbsoluto / totalPrevisto) * 100 : 0,
+                            statusCount, rankingOperadores, analiseItens, 
+                            totalDiferencaLiquida: totalRealizado - totalPrevisto,
+                            totalDiferencaLiquidaPerc: totalPrevisto > 0 ? ((totalRealizado - totalPrevisto) / totalPrevisto) * 100 : 0,
+                            totalRegistros: filteredData.length, tolerance, tipoOperador, tipoItem
+                        };
+                    }
+                }
+
+                // Stats Ocorrencias
+                let statsOcorrencias = null;
+                if (view === 'ocorrencias' && filteredData.length > 0) {
+                    const locais = {};
+                    filteredData.forEach(row => { locais[row.Localidade] = (locais[row.Localidade] || 0) + 1; });
+                    const topLocal = Object.keys(locais).reduce((a, b) => locais[a] > locais[b] ? a : b, Object.keys(locais)[0]);
+                    statsOcorrencias = { total: filteredData.length, locais, topLocal, maxLocalOcorrencias: locais[topLocal] };
+                }
+
+                // Stats Estoque
+                let statsEstoque = null;
+                if (view === 'estoque' && filteredData.length > 0) {
+                    let totalEstoque = 0, totalConsumoReal = 0, totalConsumoProj = 0;
+                    const pca = this.state.pcaProjections;
+
+                    const itens = filteredData.map(row => {
+                        const desc = row.Descrição.toUpperCase();
+                        let pcaVol = null;
+                        if (desc.includes('DDG OURO')) pcaVol = pca.find(p => p.ingrediente === 'DDG OURO')?.volume;
+                        else if (desc.includes('DDG S')) pcaVol = pca.find(p => p.ingrediente === 'DDG S')?.volume;
+                        else if (desc.includes('IMPACTO')) pcaVol = pca.find(p => p.ingrediente === 'IMPACTO')?.volume;
+                        else if (desc.includes('MILHETO')) pcaVol = pca.find(p => p.ingrediente === 'MILHETO')?.volume;
+                        else if (desc.includes('RUMITECH')) pcaVol = pca.find(p => p.ingrediente === 'RUMITECH')?.volume;
+                        else if (desc.includes('SILAGEM')) pcaVol = pca.find(p => p.ingrediente === 'SILAGEM BRACHIARIA')?.volume;
+
+                        const consumoProjAtualizado = pcaVol !== null && pcaVol !== undefined ? pcaVol : row._consumoProj;
+                        const autonomiaProjAtualizada = consumoProjAtualizado > 0 ? Math.floor(row._estoque / consumoProjAtualizado) : 0;
+
+                        totalEstoque += row._estoque;
+                        totalConsumoReal += row._consumoReal;
+                        totalConsumoProj += consumoProjAtualizado;
+
+                        return { ...row, _consumoProj: consumoProjAtualizado, _autonomiaProj: autonomiaProjAtualizada };
+                    }).sort((a, b) => a._autonomiaReal - b._autonomiaReal);
+
+                    statsEstoque = { 
+                        totalEstoque, totalConsumoReal, totalConsumoProj, 
+                        autonomiaGeralReal: totalConsumoReal > 0 ? Math.floor(totalEstoque / totalConsumoReal) : 0,
+                        autonomiaGeralProj: totalConsumoProj > 0 ? Math.floor(totalEstoque / totalConsumoProj) : 0,
+                        itens, totalRegistros: filteredData.length 
+                    };
+                }
+
+                // Stats Tendencia
+                let statsTendencia = null;
+                if (view === 'tendencia' && filteredData.length > 0) {
+                    const semanas = Object.keys(filteredData[0].semanas || {}).sort((a,b) => {
+                        const numA = parseInt(a.replace(/\D/g, '')) || 0;
+                        const numB = parseInt(b.replace(/\D/g, '')) || 0;
+                        return numA - numB;
+                    });
+                    
+                    const maxWeekNum = semanas.length > 0 ? parseInt(semanas[semanas.length - 1].replace(/\D/g, '')) || 24 : 24;
+                    const pca = this.state.pcaProjections;
+                    
+                    const itens = filteredData.map(row => {
+                        const desc = row.Descrição ? row.Descrição.toUpperCase() : '';
+                        let pcaVol = null;
+                        if (desc.includes('DDG OURO')) pcaVol = pca.find(p => p.ingrediente === 'DDG OURO')?.volume;
+                        else if (desc.includes('DDG S')) pcaVol = pca.find(p => p.ingrediente === 'DDG S')?.volume;
+                        else if (desc.includes('IMPACTO')) pcaVol = pca.find(p => p.ingrediente === 'IMPACTO')?.volume;
+                        else if (desc.includes('MILHETO')) pcaVol = pca.find(p => p.ingrediente === 'MILHETO')?.volume;
+                        else if (desc.includes('RUMITECH')) pcaVol = pca.find(p => p.ingrediente === 'RUMITECH')?.volume;
+                        else if (desc.includes('SILAGEM')) pcaVol = pca.find(p => p.ingrediente === 'SILAGEM BRACHIARIA')?.volume;
+                        return { ...row, _pcaProjecao: pcaVol };
+                    });
+
+                    statsTendencia = { semanas, proj1: `sem. ${maxWeekNum + 1}`, proj2: `sem. ${maxWeekNum + 2}`, itens, totalRegistros: filteredData.length };
+                }
+
+                this.derived = { filterOptions, filteredData, stats, statsOcorrencias, statsEstoque, statsTendencia, derivedTendencia };
+            },
+
+            // ==========================================
+            // 4. AÇÕES E EVENTOS (Actions)
+            // ==========================================
+            actions: {
+                setActiveTab: (tab) => { App.state.activeTab = tab; App.render(); },
+                setActiveView: (view) => { 
+                    App.state.activeView = view; 
+                    App.state.filters = { data: 'Todas', localidade: 'Todas', dieta: 'Todas', ingrediente: 'Todos' };
+                    App.render(); 
+                },
+                setFilter: (key, val) => { App.state.filters[key] = val; App.render(); },
+                updateRawData: (val) => {
+                    const view = App.state.activeView;
+                    if(view === 'carregamento' || view === 'tendencia') App.state.raw.carregamento = val;
+                    else if(view === 'distribuicao') App.state.raw.distribuicao = val;
+                    else if(view === 'estoque') App.state.raw.estoque = val;
+                    else App.state.raw.ocorrencias = val;
+                },
+                processRawData: () => {
+                    const view = App.state.activeView;
+                    const raw = App.state.raw[view === 'tendencia' ? 'carregamento' : view];
+                    App.processData(raw, view === 'tendencia' ? 'carregamento' : view);
+                },
+                handleAttachMedia: (id, files) => {
+                    if (!files || files.length === 0) return;
+                    const newMedia = Array.from(files).map(file => ({
+                        type: file.type.startsWith('video/') ? 'video' : 'image',
+                        url: URL.createObjectURL(file), name: file.name
+                    }));
+                    if(!App.state.attachments[id]) App.state.attachments[id] = [];
+                    App.state.attachments[id] = [...App.state.attachments[id], ...newMedia];
+                    App.render();
+                },
+                removeMedia: (id, indexToRemove) => {
+                    if(App.state.attachments[id]) {
+                        App.state.attachments[id] = App.state.attachments[id].filter((_, idx) => idx !== indexToRemove);
+                        App.render();
+                    }
+                },
+                updatePCA: (idx, val) => { App.state.pcaProjections[idx].volume = Number(val); App.render(); },
+                updateEstoqueAvulso: (idx, val) => { App.state.estoqueAvulsoData[idx].quantidade = Number(val); }, // Sem re-render pra não perder foco
+                saveEstoqueAvulso: () => { 
+                    App.state.salvo = true; App.render(); 
+                    setTimeout(() => { App.state.salvo = false; App.render(); }, 3000); 
+                },
+                handleLogout: () => {
+                    App.state.activeTab = 'dashboard';
+                    App.state.activeView = 'carregamento';
+                    App.render();
+                }
+            },
+
+            // ==========================================
+            // 5. FUNÇÕES DE CRIAÇÃO DE GRÁFICOS (SVG)
+            // ==========================================
+            renderTrendChart: function() {
+                const data = this.derived.statsTendencia.itens;
+                const semanas = this.derived.statsTendencia.semanas;
+                if (!data || data.length === 0 || !semanas || semanas.length === 0) return `<div class="h-64 flex items-center justify-center text-gray-400">Nenhum dado encontrado.</div>`;
+                
+                const chartData = data.slice(0, 5); 
+                const width = 900, height = 350, margin = { top: 30, right: 30, bottom: 50, left: 60 };
+                const chartW = width - margin.left - margin.right;
+                const chartH = height - margin.top - margin.bottom;
+
+                let maxY = 1;
+                chartData.forEach(d => {
+                    if (d._pcaProjecao && d._pcaProjecao > maxY) maxY = d._pcaProjecao;
+                    semanas.forEach(s => { if (d.semanas[s] > maxY) maxY = d.semanas[s]; });
+                });
+                maxY = maxY * 1.15; 
+
+                const getX = (i) => margin.left + (i * (chartW / Math.max(semanas.length - 1, 1)));
+                const getY = (val) => margin.top + chartH - ((val / maxY) * chartH);
+                const colors = ['#2563eb', '#ea580c', '#16a34a', '#9333ea', '#dc2626'];
+
+                let svgContent = `
+                    <line x1="${margin.left}" y1="${margin.top+chartH}" x2="${width-margin.right}" y2="${margin.top+chartH}" stroke="#cbd5e1" stroke-width="2" />
+                    <line x1="${margin.left}" y1="${margin.top}" x2="${width-margin.right}" y2="${margin.top}" stroke="#e2e8f0" stroke-dasharray="4" />
+                    <text x="${margin.left - 10}" y="${margin.top + 5}" font-size="10" fill="#64748b" text-anchor="end">${Math.round(maxY).toLocaleString('pt-BR')} kg</text>
+                    <text x="${margin.left - 10}" y="${margin.top + chartH}" font-size="10" fill="#64748b" text-anchor="end">0 kg</text>
+                `;
+
+                semanas.forEach((sem, i) => {
+                    svgContent += `<text x="${getX(i)}" y="${margin.top + chartH + 20}" font-size="11" fill="#475569" text-anchor="middle" font-weight="bold">${sem.toUpperCase()}</text>`;
+                });
+
+                chartData.forEach((d, dIdx) => {
+                    const color = colors[dIdx % colors.length];
+                    const points = semanas.map((sem, i) => `${getX(i)},${getY(d.semanas[sem] || 0)}`).join(' ');
+                    const pcaY = d._pcaProjecao ? getY(d._pcaProjecao) : null;
+                    
+                    if (pcaY) svgContent += `<line x1="${margin.left}" y1="${pcaY}" x2="${width-margin.right}" y2="${pcaY}" stroke="${color}" stroke-width="2" stroke-dasharray="6,6" opacity="0.5" />`;
+                    svgContent += `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />`;
+                    
+                    semanas.forEach((sem, i) => {
+                        svgContent += `
+                            <circle cx="${getX(i)}" cy="${getY(d.semanas[sem] || 0)}" r="5" fill="white" stroke="${color}" stroke-width="2.5" />
+                            <text x="${getX(i)}" y="${getY(d.semanas[sem] || 0) - 10}" font-size="10" fill="${color}" text-anchor="middle" font-weight="bold">${(d.semanas[sem] || 0).toLocaleString('pt-BR')}</text>
+                        `;
+                    });
+                });
+
+                const legendHtml = chartData.map((d, dIdx) => `
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 mr-2 rounded-full" style="background-color: ${colors[dIdx % colors.length]}"></div>
+                        ${d.Descrição.substring(0, 20)} (Real)
+                    </div>
+                `).join('') + `
+                    <div class="flex items-center ml-4 text-gray-500">
+                        <div class="w-6 h-0 border-t-2 border-dashed border-gray-400 mr-2"></div>Projeção PCA (Meta)
+                    </div>
+                `;
+
+                return `
+                    <div class="w-full overflow-x-auto">
+                        <svg viewBox="0 0 ${width} ${height}" class="w-full min-w-[750px] h-auto font-sans">${svgContent}</svg>
+                        <div class="flex flex-wrap justify-center gap-6 mt-4 text-xs font-bold text-gray-700">${legendHtml}</div>
+                    </div>
+                `;
+            },
+
+            renderComboChart: function() {
+                const stats = this.derived.stats;
+                if (!stats || !stats.analiseItens || stats.analiseItens.length === 0) return `<div class="h-64 flex items-center justify-center text-gray-400">Nenhum dado encontrado.</div>`;
+                
+                const chartData = [...stats.analiseItens].sort((a, b) => b.previstoKg - a.previstoKg).slice(0, 10).map(d => ({
+                    label: d.nome.split('-')[0].trim(), prev: d.previstoKg / 1000, real: d.realizadoKg / 1000, perc: Math.abs(d.diferencaPerc)
+                }));
+                const width = 900, height = 350, margin = { top: 50, right: 30, bottom: 60, left: 30 };
+                const chartW = width - margin.left - margin.right, chartH = height - margin.top - margin.bottom;
+                const maxTon = Math.max(...chartData.map(d => Math.max(d.prev, d.real))) * 1.15 || 1;
+                const maxPerc = Math.max(...chartData.map(d => d.perc)) * 1.25 || 1;
+                const getX = (i) => margin.left + (i * (chartW / chartData.length)) + (chartW / chartData.length / 2);
+                const getYTon = (val) => margin.top + chartH - ((val / maxTon) * chartH);
+                const getYPerc = (val) => margin.top + chartH - ((val / maxPerc) * chartH);
+                const baseLineY = margin.top + chartH;
+                const barW = Math.min((chartW / chartData.length) * 0.35, 32);
+                const linePoints = chartData.map((d, i) => `${getX(i)},${getYPerc(d.perc)}`).join(' ');
+
+                let svgContent = `
+                    <line x1="${margin.left - 20}" y1="${baseLineY}" x2="${width - margin.right + 20}" y2="${baseLineY}" stroke="#cbd5e1" stroke-width="1" />
+                    <polyline points="${linePoints}" fill="none" stroke="#d97706" stroke-width="2.5" />
+                `;
+
+                chartData.forEach((d, i) => {
+                    const xC = getX(i), xP = xC - barW - 1.5, xR = xC + 1.5;
+                    const yP = getYTon(d.prev), hP = baseLineY - yP, yR = getYTon(d.real), hR = baseLineY - yR, yPerc = getYPerc(d.perc);
+                    const labelStr = d.label.length > 18 ? d.label.substring(0, 18) + '...' : d.label;
+                    
+                    svgContent += `
+                        <rect x="${xP}" y="${yP}" width="${barW}" height="${hP}" fill="#1e3a8a" />
+                        <rect x="${xR}" y="${yR}" width="${barW}" height="${hR}" fill="#c2410c" />
+                        <text x="${xC}" y="${baseLineY + 20}" font-size="11" fill="#475569" text-anchor="middle" font-weight="bold">${labelStr}</text>
+                    `;
+                    if(hP > 40) svgContent += `<text x="${xP + barW / 2 + 4}" y="${baseLineY - 8}" font-size="10" fill="white" text-anchor="start" font-weight="bold" transform="rotate(-90 ${xP + barW / 2 + 4} ${baseLineY - 8})">${d.prev.toFixed(1)}</text>`;
+                    if(hR > 40) svgContent += `<text x="${xR + barW / 2 + 4}" y="${baseLineY - 8}" font-size="10" fill="white" text-anchor="start" font-weight="bold" transform="rotate(-90 ${xR + barW / 2 + 4} ${baseLineY - 8})">${d.real.toFixed(1)}</text>`;
+                    svgContent += `
+                        <circle cx="${xC}" cy="${yPerc}" r="4" fill="white" stroke="#d97706" stroke-width="2.5" />
+                        <g transform="translate(${xC - 22}, ${yPerc - 26})">
+                            <rect width="44" height="18" fill="white" stroke="#16a34a" stroke-width="1.2" rx="2" />
+                            <text x="22" y="13" font-size="10" fill="#15803d" text-anchor="middle" font-weight="bold">${d.perc.toFixed(2)}%</text>
+                        </g>
+                    `;
+                });
+
+                return `
+                    <div class="w-full overflow-x-auto">
+                        <svg viewBox="0 0 ${width} ${height}" class="w-full min-w-[750px] h-auto font-sans">${svgContent}</svg>
+                        <div class="flex justify-center space-x-10 mt-2 pb-4 text-xs font-bold text-gray-700">
+                            <div class="flex items-center"><div class="w-5 h-5 bg-[#1e3a8a] mr-2"></div>PREVISTO (TON)</div>
+                            <div class="flex items-center"><div class="w-5 h-5 bg-[#c2410c] mr-2"></div>${this.state.activeView === 'carregamento' ? 'CARREGADO' : 'DISTRIBUÍDO'} (TON)</div>
+                            <div class="flex items-center"><div class="w-8 h-1 bg-[#d97706] mr-2"></div>DESVIO %</div>
+                        </div>
+                    </div>
+                `;
+            },
+
+            renderAutonomyChart: function() {
+                const data = this.derived.statsEstoque?.itens;
+                if (!data || data.length === 0) return `<div class="h-64 flex items-center justify-center text-gray-400">Nenhum dado encontrado.</div>`;
+                
+                const chartData = [...data].slice(0, 12).map(d => ({
+                    label: d.Descrição.split(' ')[0] + (d.Descrição.split(' ').length > 1 ? ' ' + d.Descrição.split(' ')[1] : ''),
+                    farmtellDays: d._autonomiaReal, projDays: d._autonomiaProj
+                }));
+
+                const width = 900, height = 300, margin = { top: 30, right: 30, bottom: 60, left: 40 };
+                const chartW = width - margin.left - margin.right, chartH = height - margin.top - margin.bottom;
+                const maxDays = Math.min(Math.max(...chartData.map(d => Math.max(d.farmtellDays, d.projDays))) * 1.15 || 1, 365);
+                
+                const getX = (i) => margin.left + (i * (chartW / chartData.length)) + (chartW / chartData.length / 2);
+                const getY = (val) => margin.top + chartH - ((Math.min(val, maxDays) / maxDays) * chartH);
+                const baseLineY = margin.top + chartH;
+                const barW = Math.min((chartW / chartData.length) * 0.35, 28);
+
+                let svgContent = `
+                    <line x1="${margin.left}" y1="${baseLineY}" x2="${width - margin.right}" y2="${baseLineY}" stroke="#cbd5e1" stroke-width="2" />
+                    <line x1="${margin.left}" y1="${margin.top}" x2="${width - margin.right}" y2="${margin.top}" stroke="#e2e8f0" stroke-dasharray="4" />
+                    <text x="${margin.left - 5}" y="${margin.top + 5}" font-size="10" fill="#64748b" text-anchor="end">${Math.round(maxDays)} d</text>
+                    <text x="${margin.left - 5}" y="${baseLineY}" font-size="10" fill="#64748b" text-anchor="end">0 d</text>
+                `;
+
+                chartData.forEach((d, i) => {
+                    const xC = getX(i), xF = xC - barW - 1, xP = xC + 1;
+                    const yF = getY(d.farmtellDays), hF = baseLineY - yF, yP = getY(d.projDays), hP = baseLineY - yP;
+                    const labelStr = d.label.length > 15 ? d.label.substring(0, 15) + '...' : d.label;
+
+                    svgContent += `
+                        <rect x="${xF}" y="${yF}" width="${barW}" height="${hF}" fill="#475569" rx="2" ry="2" />
+                        <rect x="${xP}" y="${yP}" width="${barW}" height="${hP}" fill="#86efac" rx="2" ry="2" />
+                        <text x="${xF + barW/2}" y="${yF - 5}" font-size="10" fill="#334155" text-anchor="middle" font-weight="bold">${d.farmtellDays}</text>
+                        <text x="${xP + barW/2}" y="${yP - 5}" font-size="10" fill="#166534" text-anchor="middle" font-weight="bold">${d.projDays}</text>
+                        <text x="${xC}" y="${baseLineY + 20}" font-size="10" fill="#475569" text-anchor="middle" font-weight="bold">${labelStr}</text>
+                    `;
+                });
+
+                return `
+                    <div class="w-full overflow-x-auto">
+                        <svg viewBox="0 0 ${width} ${height}" class="w-full min-w-[750px] h-auto font-sans">${svgContent}</svg>
+                        <div class="flex justify-center space-x-10 mt-2 text-xs font-bold text-gray-700">
+                            <div class="flex items-center"><div class="w-4 h-4 bg-[#475569] mr-2 rounded-sm"></div>AUTONOMIA FARMTELL (DIAS)</div>
+                            <div class="flex items-center"><div class="w-4 h-4 bg-[#86efac] mr-2 rounded-sm"></div>AUTONOMIA PROJEÇÃO (DIAS)</div>
+                        </div>
+                    </div>
+                `;
+            },
+
+            // ==========================================
+            // 6. RENDERIZAÇÃO DA INTERFACE (HTML)
+            // ==========================================
+            renderSlicerBox: function(title, options, selectedValue, filterKey) {
+                return `
+                    <div class="bg-white border border-[#a6b5c7] rounded shadow-sm flex flex-col h-44">
+                        <div class="bg-white border-b border-[#a6b5c7] px-2 py-1.5 flex justify-between items-center">
+                            <span class="font-bold text-xs text-gray-800">${title}</span>
+                            <i data-lucide="filter" class="w-3 h-3 text-gray-400"></i>
+                        </div>
+                        <div class="flex-1 overflow-y-auto p-1 bg-white space-y-0.5 custom-scrollbar">
+                            ${options.map(opt => `
+                                <button onclick="App.actions.setFilter('${filterKey}', '${opt}')" title="${opt}"
+                                    class="w-full text-left px-2 py-1 text-xs border rounded-sm transition-colors block truncate ${selectedValue === opt ? 'bg-[#a3c2e6] border-[#729fcf] text-black font-semibold' : 'bg-[#e2eaf4] border-transparent hover:border-[#a3c2e6] text-gray-700'}"
+                                >${opt}</button>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            },
+
+            renderNavigation: function() {
+                const s = this.state;
+                return `
+                    <nav class="bg-white border-b shadow-sm sticky top-0 z-20">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div class="flex justify-between h-16">
+                                <div class="flex items-center space-x-3">
+                                    <div class="bg-blue-600 p-2 rounded-lg"><i data-lucide="trending-up" class="text-white w-6 h-6"></i></div>
+                                    <div>
+                                        <h1 class="text-xl font-bold text-gray-900 leading-tight">Farmtell Beef Analytics</h1>
+                                        <p class="text-xs text-gray-500">Inteligência em Confinamento</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <div class="flex space-x-2 mt-2">
+                                        <button onclick="App.actions.setActiveTab('dashboard')" class="flex items-center space-x-2 px-4 py-3 border-b-2 font-medium transition-colors ${s.activeTab === 'dashboard' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"><i data-lucide="bar-chart-3" class="w-4 h-4"></i><span>Dashboard</span></button>
+                                        <button onclick="App.actions.setActiveTab('data')" class="flex items-center space-x-2 px-4 py-3 border-b-2 font-medium transition-colors ${s.activeTab === 'data' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"><i data-lucide="table" class="w-4 h-4"></i><span>Dados Brutos</span></button>
+                                        <button onclick="App.actions.setActiveTab('import')" class="flex items-center space-x-2 px-4 py-3 border-b-2 font-medium transition-colors ${s.activeTab === 'import' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"><i data-lucide="upload" class="w-4 h-4"></i><span>Importar Dados</span></button>
+                                    </div>
+                                    <div class="pl-4 border-l border-gray-300 flex items-center gap-2">
+                                        <span id="user-info" class="text-sm text-gray-600"></span>
+                                        <button onclick="FirebaseService.signOut()" class="flex items-center space-x-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition text-sm font-medium">
+                                            <i data-lucide="log-out" class="w-4 h-4"></i>
+                                            <span>Sair</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </nav>
+                `;
+            },
+            },
+
+            renderViewSelector: function() {
+                const s = this.state;
+                return `
+                    <div class="flex justify-center mb-6">
+                        <div class="bg-white p-1 rounded-xl shadow-sm border border-gray-200 inline-flex flex-wrap justify-center gap-1">
+                            <button onclick="App.actions.setActiveView('carregamento')" class="px-5 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center space-x-2 ${s.activeView === 'carregamento' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'}"><i data-lucide="upload" class="w-[18px] h-[18px]"></i><span>Carregamento (Meta: 2%)</span></button>
+                            <button onclick="App.actions.setActiveView('distribuicao')" class="px-5 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center space-x-2 ${s.activeView === 'distribuicao' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'}"><i data-lucide="truck" class="w-[18px] h-[18px]"></i><span>Distribuição (Meta: 20%)</span></button>
+                            <button onclick="App.actions.setActiveView('ocorrencias')" class="px-5 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center space-x-2 ${s.activeView === 'ocorrencias' ? 'bg-red-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'}"><i data-lucide="clipboard-list" class="w-[18px] h-[18px]"></i><span>Ocorrências</span></button>
+                            <button onclick="App.actions.setActiveView('estoque')" class="px-5 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center space-x-2 ${s.activeView === 'estoque' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'}"><i data-lucide="package" class="w-[18px] h-[18px]"></i><span>Estoque Atual</span></button>
+                            <button onclick="App.actions.setActiveView('tendencia')" class="px-5 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center space-x-2 ${s.activeView === 'tendencia' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'}"><i data-lucide="line-chart" class="w-[18px] h-[18px]"></i><span>Tendência Histórica</span></button>
+                        </div>
+                    </div>
+                `;
+            },
+
+            renderImport: function() {
+                const s = this.state;
+                const v = s.activeView;
+                const title = v === 'carregamento' ? 'Carregamento' : v === 'distribuicao' ? 'Distribuição' : v === 'estoque' ? 'Estoque (Autonomia vs Projeção)' : v === 'tendencia' ? 'Histórico de Consumo' : 'Registro de Ocorrências';
+                const desc = v === 'ocorrencias' ? 'O sistema irá separar inteligentemente os responsáveis e os descritivos.' : v === 'estoque' ? 'O sistema calculará a Autonomia baseada no Farmtell vs Projeção PCA.' : v === 'tendencia' ? 'Os dados de histórico e semanas são extraídos e calculados automaticamente da aba de Carregamento. Você pode importar novos dados aqui mesmo.' : 'O sistema calculará todos os desvios automaticamente.';
+                const rawData = s.raw[v === 'tendencia' ? 'carregamento' : v];
+                const colorBase = v === 'carregamento' ? 'blue' : v === 'distribuicao' ? 'indigo' : v === 'estoque' ? 'teal' : v === 'tendencia' ? 'purple' : 'red';
+                const icon = v === 'ocorrencias' ? 'clipboard-list' : v === 'estoque' ? 'package' : v === 'tendencia' ? 'line-chart' : 'upload';
+
+                return `
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 max-w-4xl mx-auto">
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="p-2 rounded-full bg-${colorBase}-100"><i data-lucide="${icon}" class="text-${colorBase}-600 w-5 h-5"></i></div>
+                            <h2 class="text-xl font-semibold">Alimentar Sistema: ${title}</h2>
+                        </div>
+                        <div class="mb-4 p-4 rounded-lg flex items-start space-x-3 border bg-${colorBase}-50 border-${colorBase}-100">
+                            <i data-lucide="info" class="text-${colorBase}-500 shrink-0 mt-0.5 w-[18px] h-[18px]"></i>
+                            <p class="text-sm text-${colorBase}-800">Cole os dados de <strong>${v.charAt(0).toUpperCase() + v.slice(1)}</strong> abaixo. ${desc}</p>
+                        </div>
+                        <textarea class="w-full h-64 p-4 border rounded-lg focus:ring-2 font-mono text-sm whitespace-pre text-nowrap overflow-x-auto focus:ring-${colorBase}-500 focus:border-${colorBase}-500" placeholder="Cole os dados da planilha aqui..." oninput="App.actions.updateRawData(this.value)">${rawData}</textarea>
+                        ${s.error ? `<div class="mt-3 text-red-600 text-sm font-medium">${s.error}</div>` : ''}
+                        <div class="mt-6 flex justify-end">
+                            <button onclick="App.actions.processRawData()" class="bg-${colorBase}-600 hover:bg-${colorBase}-700 text-white px-6 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center space-x-2"><i data-lucide="refresh-cw" class="w-[18px] h-[18px]"></i><span>Processar Informações</span></button>
+                        </div>
+                    </div>
+                `;
+            },
+
+            renderDashboard: function() {
+                this.calculateDerived();
+                const d = this.derived;
+                const v = this.state.activeView;
+
+                if (d.filteredData.length === 0) {
+                    return `
+                        <div class="space-y-6">
+                            ${this.renderFiltersHtml()}
+                            <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 p-6 rounded-xl text-center">
+                                <i data-lucide="alert-triangle" class="mx-auto mb-2 text-yellow-500 w-8 h-8"></i>
+                                <h3 class="font-bold text-lg">Nenhum registro encontrado</h3>
+                                <p>Os filtros selecionados não retornaram resultados. Tente limpar os filtros escolhendo a opção "Todas/Todos".</p>
+                            </div>
+                        </div>`;
+                }
+
+                let content = '';
+                if (v === 'carregamento' || v === 'distribuicao') {
+                    content = this.renderDashStats(v, d.stats);
+                } else if (v === 'ocorrencias') {
+                    content = this.renderDashOcorrencias(d.statsOcorrencias, d.filteredData);
+                } else if (v === 'estoque') {
+                    content = this.renderDashEstoque(d.statsEstoque);
+                } else if (v === 'tendencia') {
+                    content = this.renderDashTendencia(d.statsTendencia);
+                }
+
+                return `<div class="space-y-6">${this.renderFiltersHtml()}${content}</div>`;
+            },
+
+            renderFiltersHtml: function() {
+                const v = this.state.activeView;
+                const o = this.derived.filterOptions;
+                const f = this.state.filters;
+                let html = `<div class="grid gap-4 mb-4 ${v === 'ocorrencias' || v === 'estoque' || v === 'tendencia' ? 'grid-cols-1 sm:grid-cols-2 max-w-2xl mx-auto' : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'}">`;
+                
+                if (v !== 'estoque' && v !== 'tendencia') html += this.renderSlicerBox('Data', o.datas, f.data, 'data');
+                if (v !== 'estoque') html += this.renderSlicerBox('Localidade', o.localidades, f.localidade, 'localidade');
+                if (v !== 'ocorrencias' && v !== 'estoque' && v !== 'tendencia') html += this.renderSlicerBox('Dieta', o.dietas, f.dieta, 'dieta');
+                if (v === 'carregamento' || v === 'estoque' || v === 'tendencia') html += this.renderSlicerBox('Ingrediente', o.ingredientes, f.ingrediente, 'ingrediente');
+                
+                html += `</div>`;
+                return html;
+            },
+
+            renderDashStats: function(v, st) {
+                if(!st) return '';
+                const colorBase = v === 'carregamento' ? 'blue' : 'indigo';
+                const bgTitle = v === 'carregamento' ? '#b4c6e7' : '#fce4d6';
+                const icn = v === 'carregamento' ? 'users' : 'users'; // reusing users for both
+
+                let rankingHtml = '';
+                st.rankingOperadores.forEach((op, i) => {
+                    const w = Math.min((op.erroMedioPerc / (st.tolerance * 2)) * 100, 100);
+                    const c = op.erroMedioPerc > st.tolerance * 1.5 ? 'bg-red-500' : op.erroMedioPerc > st.tolerance ? 'bg-yellow-400' : 'bg-green-500';
+                    rankingHtml += `
+                        <div class="flex items-center">
+                            <div class="w-48 truncate font-medium text-sm text-gray-700" title="${op.nome}">${i + 1}. ${op.nome}</div>
+                            <div class="flex-1 ml-4 relative flex items-center">
+                                <div class="w-full bg-gray-100 rounded-full h-5 relative"><div class="${c} h-5 rounded-full transition-all duration-500" style="width: ${w}%"></div></div>
+                                <div class="absolute right-0 translate-x-full ml-3 text-sm font-bold text-gray-700 w-16">${op.erroMedioPerc.toFixed(2)}%</div>
+                            </div>
+                            <div class="w-24 text-right text-xs text-gray-500 ml-16">${op.operacoes} ações</div>
+                        </div>`;
+                });
+
+                let tableHtml = '';
+                st.analiseItens.forEach(i => {
+                    const isPos = i.diferencaPerc > 0;
+                    const above = Math.abs(i.diferencaPerc) > st.tolerance;
+                    const bCol = above ? 'bg-red-500' : (isPos ? 'bg-blue-500' : 'bg-orange-400');
+                    const w = Math.min(Math.abs(i.diferencaPerc) * (100 / st.tolerance), 100);
+                    tableHtml += `
+                        <tr class="border-b border-gray-200 hover:bg-gray-50 transition-colors bg-white">
+                            <td class="px-4 py-2 font-medium text-gray-800 border-r border-gray-200">${i.nome}</td>
+                            <td class="px-4 py-2 text-right border-r border-gray-200">${i.previstoKg.toLocaleString('pt-BR')}</td>
+                            <td class="px-4 py-2 text-right font-medium border-r border-gray-200">${i.realizadoKg.toLocaleString('pt-BR')}</td>
+                            <td class="px-4 py-2 text-right font-bold border-r border-gray-200 ${i.diferencaKg > 0 ? 'text-blue-600' : i.diferencaKg < 0 ? 'text-orange-600' : 'text-gray-500'}">${i.diferencaKg > 0 ? '+' : ''}${i.diferencaKg.toLocaleString('pt-BR')}</td>
+                            <td class="px-4 py-2">
+                                <div class="flex items-center justify-end space-x-2">
+                                    <span class="font-bold w-16 text-right ${i.diferencaPerc > 0 ? 'text-blue-600' : i.diferencaPerc < 0 ? 'text-orange-600' : 'text-gray-500'}">${i.diferencaPerc > 0 ? '+' : ''}${i.diferencaPerc.toFixed(2)}%</span>
+                                    <div class="w-20 bg-gray-100 rounded h-2.5 overflow-hidden flex" style="justify-content: ${isPos ? 'flex-start' : 'flex-end'}"><div class="${bCol} h-2.5 rounded-sm" style="width: ${w}%"></div></div>
+                                </div>
+                            </td>
+                        </tr>`;
+                });
+
+                return `
+                    <div class="flex justify-between items-end">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900">Análise de Trato - ${v === 'carregamento' ? 'Carregamento' : 'Distribuição'}</h2>
+                            <p class="text-gray-500">Baseado em ${st.totalRegistros} registros correspondentes aos filtros.</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                            <span class="text-gray-500 text-sm font-medium mb-1">Total Previsto (kg)</span>
+                            <span class="text-2xl font-bold text-gray-800">${st.totalPrevisto.toLocaleString('pt-BR')}</span>
+                        </div>
+                        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                            <span class="text-gray-500 text-sm font-medium mb-1">Total ${v === 'carregamento' ? 'Carregado' : 'Distribuído'} (kg)</span>
+                            <span class="text-2xl font-bold text-gray-800">${st.totalRealizado.toLocaleString('pt-BR')}</span>
+                        </div>
+                        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                            <span class="text-gray-500 text-sm font-medium mb-1">Desvio Absoluto Total (kg)</span>
+                            <span class="text-2xl font-bold text-orange-600">${st.totalDesvioAbsoluto.toLocaleString('pt-BR')}</span>
+                        </div>
+                        <div class="bg-gradient-to-br from-${colorBase}-600 to-${colorBase}-800 border-${colorBase}-200 p-5 rounded-xl shadow-sm border flex flex-col justify-center text-white">
+                            <span class="text-white/80 text-sm font-medium mb-1">Média de Desvio Geral (%)</span>
+                            <div class="flex items-center space-x-2">
+                                <span class="text-3xl font-bold">${st.desvioGeralPerc.toFixed(2)}%</span>
+                                ${st.desvioGeralPerc > st.tolerance ? '<i data-lucide="alert-triangle" class="text-yellow-300 w-6 h-6"></i>' : ''}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 lg:col-span-1">
+                            <div class="flex items-center space-x-2 mb-6"><i data-lucide="check-circle" class="text-green-500 w-5 h-5"></i><h3 class="text-lg font-semibold">Status das Cargas</h3></div>
+                            <div class="space-y-4">
+                                ${['VERDE', 'AMARELO', 'VERMELHO'].map(s => `
+                                    <div>
+                                        <div class="flex justify-between text-sm mb-1">
+                                            <span class="font-medium ${s==='VERDE'?'text-green-700':s==='AMARELO'?'text-yellow-600':'text-red-600'}">${s==='VERDE'?'Dentro da Meta':s==='AMARELO'?'Atenção':'Fora da Meta'} (${s})</span>
+                                            <span class="font-bold">${st.statusCount[s]}</span>
+                                        </div>
+                                        <div class="w-full bg-gray-100 rounded-full h-3">
+                                            <div class="${s==='VERDE'?'bg-green-500':s==='AMARELO'?'bg-yellow-400':'bg-red-500'} h-3 rounded-full" style="width: ${(st.statusCount[s] / st.totalRegistros) * 100}%"></div>
+                                        </div>
+                                    </div>`).join('')}
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 lg:col-span-2">
+                            <div class="flex items-center space-x-2 mb-6"><i data-lucide="${icn}" class="text-${colorBase}-500 w-5 h-5"></i><h3 class="text-lg font-semibold">Ranking de Desvio por ${st.tipoOperador}</h3></div>
+                            <div class="space-y-5 max-h-56 overflow-y-auto pr-2 custom-scrollbar">${rankingHtml}</div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <div class="flex items-center space-x-2 mb-6"><i data-lucide="activity" class="text-purple-500 w-5 h-5"></i><h3 class="text-lg font-semibold uppercase">Desvio e Consumo por ${st.tipoItem}</h3></div>
+                        <div class="mb-6 border-b border-gray-100 pb-4">${this.renderComboChart()}</div>
+                        <div class="overflow-x-auto border border-gray-300 rounded-lg">
+                            <table class="min-w-full text-sm text-left whitespace-nowrap">
+                                <thead class="text-xs uppercase font-bold border-b border-gray-300 bg-[${bgTitle}] text-gray-900">
+                                    <tr>
+                                        <th class="px-4 py-3 border-r border-gray-300">${v === 'carregamento' ? 'INGREDIENTES' : 'DIETA'}</th>
+                                        <th class="px-4 py-3 text-right border-r border-gray-300">${v === 'carregamento' ? 'PREVISTO KG' : 'Soma de Previsto (kg)'}</th>
+                                        <th class="px-4 py-3 text-right border-r border-gray-300">${v === 'carregamento' ? 'CARREGADO KG' : 'Soma de Distribuído (kg)'}</th>
+                                        <th class="px-4 py-3 text-right border-r border-gray-300">${v === 'carregamento' ? 'DIFERENÇA KG' : 'Diferença (Kg)'}</th>
+                                        <th class="px-4 py-3 text-center w-48">%</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${tableHtml}</tbody>
+                                <tfoot class="font-bold border-t-2 border-gray-400 bg-[${bgTitle}] text-gray-900">
+                                    <tr>
+                                        <td class="px-4 py-3 border-r border-gray-300">Total Geral</td>
+                                        <td class="px-4 py-3 text-right border-r border-gray-300">${st.totalPrevisto.toLocaleString('pt-BR')}</td>
+                                        <td class="px-4 py-3 text-right border-r border-gray-300">${st.totalRealizado.toLocaleString('pt-BR')}</td>
+                                        <td class="px-4 py-3 text-right border-r border-gray-300 ${st.totalDiferencaLiquida > 0 ? 'text-blue-800' : st.totalDiferencaLiquida < 0 ? 'text-orange-800' : 'text-gray-900'}">${st.totalDiferencaLiquida > 0 ? '+' : ''}${st.totalDiferencaLiquida.toLocaleString('pt-BR')}</td>
+                                        <td class="px-0 py-0 text-right align-middle">
+                                            <div class="w-full h-full px-4 py-3 flex items-center justify-center text-white ${Math.abs(st.totalDiferencaLiquidaPerc) > st.tolerance ? 'bg-red-600' : 'bg-[#00b050]'}">${st.totalDiferencaLiquidaPerc > 0 ? '+' : ''}${st.totalDiferencaLiquidaPerc.toFixed(2)}%</div>
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>`;
+            },
+
+            renderDashOcorrencias: function(st, data) {
+                if(!st) return '';
+                let itemsHtml = data.map((r) => {
+                    const atts = this.state.attachments[r._id] || [];
+                    let attsHtml = '';
+                    if(atts.length > 0) {
+                        attsHtml = `<div class="flex gap-3 mb-4 overflow-x-auto pb-2 custom-scrollbar">` + 
+                            atts.map((m, mIdx) => `
+                                <div class="relative group flex-shrink-0">
+                                    ${m.type === 'video' ? `<video src="${m.url}" class="h-24 w-32 object-cover rounded-lg border border-gray-200 bg-black" controls></video>` : `<img src="${m.url}" class="h-24 w-32 object-cover rounded-lg border border-gray-200 shadow-sm">`}
+                                    <button onclick="App.actions.removeMedia('${r._id}', ${mIdx})" class="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow"><i data-lucide="x" class="w-3 h-3"></i></button>
+                                </div>
+                            `).join('') + `</div>`;
+                    }
+                    return `
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col hover:border-red-300 transition-colors">
+                            <div class="flex justify-between items-start mb-4">
+                                <h3 class="font-bold text-gray-900 text-lg leading-tight flex-1 pr-4">${r.Titulo}</h3>
+                                <span class="bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded font-semibold flex-shrink-0 border">${r.Data}</span>
+                            </div>
+                            <div class="flex-1"><p class="text-gray-700 text-sm mb-4 leading-relaxed">${r._descricao}</p></div>
+                            ${attsHtml}
+                            <div class="border-t border-gray-100 pt-4 flex flex-col sm:flex-row justify-between items-center text-xs font-medium text-gray-500 gap-3">
+                                <div class="flex gap-2 w-full sm:w-auto">
+                                    <div class="flex items-center text-indigo-700 bg-indigo-50 px-2.5 py-1.5 rounded"><i data-lucide="map-pin" class="w-3.5 h-3.5 mr-1.5"></i> ${r.Localidade}</div>
+                                    <div class="flex items-center text-gray-600 bg-gray-50 px-2.5 py-1.5 rounded border border-gray-100" title="Responsáveis pelas informações"><i data-lucide="user" class="w-3.5 h-3.5 mr-1.5"></i><span class="truncate max-w-[120px]">${r._responsavel}</span></div>
+                                </div>
+                                <label class="cursor-pointer flex items-center justify-center text-blue-700 bg-blue-50 px-3 py-1.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors w-full sm:w-auto font-bold">
+                                    <i data-lucide="paperclip" class="w-3.5 h-3.5 mr-1.5"></i> Anexar Mídia
+                                    <input type="file" multiple accept="image/*,video/*" class="hidden" onchange="App.actions.handleAttachMedia('${r._id}', this.files)" />
+                                </label>
+                            </div>
+                        </div>`;
+                }).join('');
+
+                return `
+                    <div class="flex justify-between items-end">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900">Diário de Ocorrências</h2>
+                            <p class="text-gray-500">Acompanhamento e registro de imprevistos do confinamento.</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-l-4 border-l-red-500 flex items-center justify-between">
+                            <div><p class="text-sm text-gray-500 font-medium uppercase tracking-wider">Total Registrado</p><h4 class="text-3xl font-bold text-gray-900">${st.total} Ocorrência(s)</h4></div>
+                            <div class="bg-red-100 p-3 rounded-full text-red-600"><i data-lucide="message-square-warning" class="w-7 h-7"></i></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center justify-between">
+                            <div><p class="text-sm text-gray-500 font-medium uppercase tracking-wider">Local com mais alertas</p><h4 class="text-2xl font-bold text-gray-900">${st.topLocal} <span class="text-lg font-medium text-red-500">(${st.maxLocalOcorrencias})</span></h4></div>
+                            <div class="bg-gray-100 p-3 rounded-full text-gray-600"><i data-lucide="map-pin" class="w-7 h-7"></i></div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">${itemsHtml}</div>
+                `;
+            },
+
+            renderDashEstoque: function(st) {
+                if(!st) return '';
+                let pcaHtml = this.state.pcaProjections.map((p, idx) => `
+                    <tr class="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-2.5 border-r border-gray-200 font-medium text-gray-700 text-right">${p.ingrediente}</td>
+                        <td class="px-3 py-2.5 bg-teal-50/10">
+                            <input type="number" class="w-24 text-center bg-white border border-gray-300 rounded px-2 py-1 font-bold text-gray-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-none shadow-sm" value="${p.volume}" onchange="App.actions.updatePCA(${idx}, this.value)">
+                        </td>
+                    </tr>`).join('');
+
+                let mainTableHtml = st.itens.map(i => {
+                    const isZ = i._autonomiaReal === 0 || i._estoque === 0;
+                    const isL = !isZ && i._autonomiaReal < 15;
+                    const cRow = isL ? 'bg-[#fce4d6]' : 'bg-white hover:bg-gray-50';
+                    const cTxt = isZ ? 'text-red-600' : 'text-gray-900';
+                    return `
+                        <tr class="border-b transition-colors ${cRow} ${cTxt}">
+                            <td class="px-4 py-2 border-r border-gray-200">${i.Produto}</td>
+                            <td class="px-4 py-2 border-r border-gray-200 font-medium">${i.Descrição}</td>
+                            <td class="px-4 py-2 border-r border-gray-200">${i._estoque.toLocaleString('pt-BR')}</td>
+                            <td class="px-4 py-2 border-r border-gray-200 font-bold">${i._consumoReal.toLocaleString('pt-BR')}</td>
+                            <td class="px-4 py-2 border-r border-gray-200">${i._autonomiaReal}</td>
+                            <td class="px-4 py-2 border-r border-gray-200 font-bold">${i._consumoProj.toLocaleString('pt-BR')}</td>
+                            <td class="px-4 py-2">${i._autonomiaProj}</td>
+                        </tr>`;
+                }).join('');
+
+                let avulsoHtml = this.state.estoqueAvulsoData.map((a, idx) => `
+                    <tr class="border-b hover:bg-teal-50/30 transition-colors bg-white group">
+                        <td class="px-4 py-2 border-r border-gray-200 text-left font-medium text-gray-500">${a.categoria}</td>
+                        <td class="px-4 py-2 border-r border-gray-200 font-bold text-gray-700">${a.codigo}</td>
+                        <td class="px-4 py-2 border-r border-gray-200 text-left font-semibold text-gray-800">${a.descricao}</td>
+                        <td class="px-4 py-2 bg-teal-50/20 group-hover:bg-teal-50/60 transition-colors">
+                            <input type="number" class="w-full text-right bg-white border border-gray-300 rounded px-2 py-1.5 font-bold text-gray-900 focus:ring-2 focus:ring-teal-400 focus:border-teal-400 focus:outline-none shadow-sm" value="${a.quantidade}" onchange="App.actions.updateEstoqueAvulso(${idx}, this.value)">
+                        </td>
+                    </tr>`).join('');
+
+                return `
+                    <div class="flex justify-between items-end">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900">Estoque: Autonomia Farmtell vs Projeção</h2>
+                            <p class="text-gray-500">Confronto do consumo de insumos na fábrica para análise de viabilidade e dias restantes.</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                            <span class="text-gray-500 text-sm font-medium mb-1">Total Estoque Atual (kg)</span>
+                            <span class="text-2xl font-bold text-gray-800">${st.totalEstoque.toLocaleString('pt-BR')}</span>
+                        </div>
+                        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                            <span class="text-gray-500 text-sm font-medium mb-1">Consumo Real/Dia (kg)</span>
+                            <span class="text-2xl font-bold text-gray-800">${st.totalConsumoReal.toLocaleString('pt-BR')}</span>
+                        </div>
+                        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                            <span class="text-gray-500 text-sm font-medium mb-1">Consumo Proj/Dia (kg)</span>
+                            <span class="text-2xl font-bold text-gray-800">${st.totalConsumoProj.toLocaleString('pt-BR')}</span>
+                        </div>
+                        <div class="bg-gradient-to-br from-teal-600 to-teal-800 p-5 rounded-xl shadow-sm border border-teal-200 flex flex-col justify-center text-white">
+                            <span class="text-white/80 text-sm font-medium mb-1">Autonomia Média Global</span>
+                            <div class="flex items-center space-x-2"><span class="text-3xl font-bold">${st.autonomiaGeralReal} dias</span><i data-lucide="calendar-days" class="text-teal-200 opacity-80 w-6 h-6"></i></div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-300 overflow-hidden flex flex-col">
+                            <table class="min-w-full text-sm text-center whitespace-nowrap">
+                                <thead>
+                                    <tr class="border-b-2 border-gray-800 bg-white">
+                                        <th class="px-3 py-3 font-bold italic border-r border-gray-300 text-gray-800 leading-tight text-left">PROJEÇÃO DE CONSUMO<br/><span class="text-[11px] font-semibold text-gray-600">(MÉDIA DIÁRIA) (compartilhada em 21/mai/2026)</span></th>
+                                        <th class="px-3 py-3 font-bold italic text-gray-800 text-base align-middle">VOL. Kg</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${pcaHtml}</tbody>
+                            </table>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 lg:col-span-2 flex flex-col justify-center">
+                            <div class="flex items-center space-x-2 mb-2"><i data-lucide="activity" class="text-teal-600 w-5 h-5"></i><h3 class="text-lg font-semibold uppercase">Gráfico de Autonomia (Dias Restantes)</h3></div>
+                            ${this.renderAutonomyChart()}
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-300 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full text-sm text-center whitespace-nowrap">
+                                <thead>
+                                    <tr>
+                                        <th rowspan="2" class="px-4 py-3 font-bold border-r border-b border-gray-300 align-middle">PRODUTO</th>
+                                        <th rowspan="2" class="px-4 py-3 font-bold border-r border-b border-gray-300 align-middle">DESCRIÇÃO</th>
+                                        <th rowspan="2" class="px-4 py-3 font-bold border-r border-b border-gray-300 align-middle bg-gray-100">QTD. ESTOQUE<br/>ATUAL (Kg)</th>
+                                        <th colspan="2" class="px-4 py-2 font-bold border-r border-b border-gray-300 align-middle italic tracking-wide">FARMTELL</th>
+                                        <th colspan="2" class="px-4 py-2 font-bold border-b border-gray-300 align-middle italic tracking-wide">PROJEÇÃO<br/><span class="text-xs font-normal">(junho/2026)</span></th>
+                                    </tr>
+                                    <tr>
+                                        <th class="px-4 py-2 font-bold border-r border-b border-gray-300 bg-gray-100 text-xs">CONSUMO DIÁRIO<br/>(semana 24)</th>
+                                        <th class="px-4 py-2 font-bold border-r border-b border-gray-300 bg-gray-100 text-xs">AUTONOMIA<br/>(dias)</th>
+                                        <th class="px-4 py-2 font-bold border-r border-b border-gray-300 bg-[#e2efda] text-xs">CONSUMO DIÁRIO</th>
+                                        <th class="px-4 py-2 font-bold border-b border-gray-300 bg-[#e2efda] text-xs">AUTONOMIA<br/>(dias)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${mainTableHtml}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="mt-10 border-t border-gray-200 pt-8">
+                        <div class="flex justify-between items-end mb-6">
+                            <div><h3 class="text-xl font-bold text-gray-900">Outros Insumos na Fábrica (Estoque Avulso)</h3><p class="text-gray-500 text-sm">Controle manual de ingredientes em estoque que não constam nas formulações das dietas diárias atuais.</p></div>
+                            <button onclick="App.actions.saveEstoqueAvulso()" class="bg-teal-600 hover:bg-teal-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-sm transition-colors flex items-center space-x-2">
+                                <i data-lucide="${this.state.salvo ? 'check-circle' : 'save'}" class="w-[18px] h-[18px]"></i><span>${this.state.salvo ? 'Salvo com sucesso!' : 'Salvar Alterações'}</span>
+                            </button>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-300 overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full text-sm text-center whitespace-nowrap">
+                                    <thead class="bg-gray-100">
+                                        <tr>
+                                            <th class="px-4 py-3 font-bold border-r border-b border-gray-300 text-left w-48">CATEGORIA</th>
+                                            <th class="px-4 py-3 font-bold border-r border-b border-gray-300">CÓDIGO</th>
+                                            <th class="px-4 py-3 font-bold border-r border-b border-gray-300 text-left">DESCRIÇÃO</th>
+                                            <th class="px-4 py-3 font-bold border-b border-gray-300 bg-teal-50 text-teal-900 w-48">QTD. ESTOQUE (Kg)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${avulsoHtml}</tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            },
+
+            renderDashTendencia: function(st) {
+                if(!st) return '';
+                let tableHtml = st.itens.map(i => `
+                    <tr class="border-b hover:bg-gray-50 transition-colors bg-white">
+                        <td class="px-4 py-2 border-r border-gray-200 text-left">${i.Produto}</td>
+                        <td class="px-4 py-2 border-r border-gray-200 font-medium text-left">${i.Descrição}</td>
+                        ${st.semanas.map(sem => `<td class="px-4 py-2 border-r border-gray-200 font-bold text-gray-800">${i.semanas[sem] ? i.semanas[sem].toLocaleString('pt-BR') : '0'}</td>`).join('')}
+                        <td class="px-4 py-2 border-r border-gray-200 bg-[#2f5597]/10 text-gray-400 font-medium">--</td>
+                        <td class="px-4 py-2 bg-[#203764]/10 text-gray-400 font-medium">--</td>
+                    </tr>`).join('');
+
+                return `
+                    <div class="flex justify-between items-end">
+                        <div><h2 class="text-2xl font-bold text-gray-900">Tendência Histórica de Consumo</h2><p class="text-gray-500">Monitoramento evolutivo do consumo (Média Diária) e cruzamento direto com a Projeção (Meta PCA).</p></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <div class="flex items-center space-x-2 mb-6"><i data-lucide="line-chart" class="text-purple-600 w-5 h-5"></i><h3 class="text-lg font-semibold uppercase">Curva de Consumo x Projeção</h3></div>
+                        ${this.renderTrendChart()}
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-300 overflow-hidden mt-6">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full text-sm text-center whitespace-nowrap">
+                                <thead>
+                                    <tr>
+                                        <th class="px-4 py-3 font-bold border-r border-b border-gray-300 bg-gray-100 text-left">PRODUTO</th>
+                                        <th class="px-4 py-3 font-bold border-r border-b border-gray-300 bg-gray-100 text-left">DESCRIÇÃO</th>
+                                        ${st.semanas.map(sem => `<th class="px-4 py-3 font-bold border-r border-b border-gray-300 bg-[#dbe2f3] text-gray-900">${sem}</th>`).join('')}
+                                        <th class="px-4 py-3 font-bold border-r border-b border-gray-300 bg-[#2f5597] text-white">${st.proj1} (Proj.)</th>
+                                        <th class="px-4 py-3 font-bold border-b border-gray-300 bg-[#203764] text-white">${st.proj2} (Proj.)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${tableHtml}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            },
+
+            renderRawData: function() {
+                const v = this.state.activeView;
+                const data = this.derived.filteredData;
+                let thHtml = '', tbodyHtml = '';
+
+                if (v === 'ocorrencias') {
+                    thHtml = `<tr><th class="px-4 py-3">Data</th><th class="px-4 py-3">Localidade</th><th class="px-4 py-3">Título</th><th class="px-4 py-3 min-w-[300px]">Descrição Separada</th><th class="px-4 py-3">Responsáveis Capturados</th></tr>`;
+                    tbodyHtml = data.map(r => `<tr class="border-b hover:bg-gray-50 transition-colors"><td class="px-4 py-3 font-medium">${r.Data}</td><td class="px-4 py-3 text-gray-600">${r.Localidade}</td><td class="px-4 py-3 font-bold text-gray-800">${r.Titulo}</td><td class="px-4 py-3 text-gray-600 whitespace-normal text-xs">${r._descricao}</td><td class="px-4 py-3 text-indigo-700 font-medium whitespace-normal text-xs">${r._responsavel}</td></tr>`).join('');
+                } else if (v === 'estoque') {
+                    thHtml = `<tr><th class="px-4 py-3">Localidade</th><th class="px-4 py-3">Produto</th><th class="px-4 py-3">Descrição</th><th class="px-4 py-3 text-right">Estoque (kg)</th><th class="px-4 py-3 text-right">Consumo Real/Dia</th><th class="px-4 py-3 text-right">Consumo Proj/Dia</th></tr>`;
+                    tbodyHtml = data.map(r => `<tr class="border-b hover:bg-gray-50 transition-colors"><td class="px-4 py-3 text-gray-600">${r.Localidade}</td><td class="px-4 py-3 text-gray-600">${r.Produto}</td><td class="px-4 py-3 font-medium text-gray-800">${r.Descrição}</td><td class="px-4 py-3 text-right text-gray-500">${r._estoque.toLocaleString('pt-BR')}</td><td class="px-4 py-3 text-right text-gray-800">${r._consumoReal.toLocaleString('pt-BR')}</td><td class="px-4 py-3 text-right text-gray-800">${r._consumoProj.toLocaleString('pt-BR')}</td></tr>`).join('');
+                } else if (v === 'tendencia') {
+                    thHtml = `<tr><th class="px-4 py-3">Localidade</th><th class="px-4 py-3">Produto</th><th class="px-4 py-3">Descrição</th><th class="px-4 py-3">Semanas Encontradas</th></tr>`;
+                    tbodyHtml = data.map(r => `<tr class="border-b hover:bg-gray-50 transition-colors"><td class="px-4 py-3 text-gray-600">${r.Localidade}</td><td class="px-4 py-3 text-gray-600">${r.Produto}</td><td class="px-4 py-3 font-medium text-gray-800">${r.Descrição}</td><td class="px-4 py-3 text-gray-600 text-xs">${Object.entries(r.semanas || {}).map(([s, val]) => `${s}: ${val} kg`).join(' | ')}</td></tr>`).join('');
+                } else {
+                    thHtml = `<tr>
+                        <th class="px-4 py-3">Data/Hora</th>
+                        <th class="px-4 py-3">${v === 'carregamento' ? 'Pazeiro' : 'Tratador'} / Vagão</th>
+                        <th class="px-4 py-3">Localidade</th>
+                        ${v === 'distribuicao' ? '<th class="px-4 py-3">Curral / Lote</th>' : ''}
+                        <th class="px-4 py-3">Dieta</th>
+                        <th class="px-4 py-3">${v === 'carregamento' ? 'Ingrediente' : 'Plano Alimentar'}</th>
+                        <th class="px-4 py-3 text-right">Previsto</th>
+                        <th class="px-4 py-3 text-right">Realizado</th>
+                        <th class="px-4 py-3 text-center">Desvio</th>
+                        <th class="px-4 py-3 text-center">Status</th>
+                    </tr>`;
+                    tbodyHtml = data.map(r => {
+                        const sc = r.Status === 'VERDE' ? 'bg-green-100 text-green-800' : r.Status === 'AMARELO' ? 'bg-yellow-100 text-yellow-800' : r.Status === 'VERMELHO' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800';
+                        return `
+                            <tr class="border-b hover:bg-gray-50 transition-colors">
+                                <td class="px-4 py-3"><div class="font-medium">${r.Data}</div><div class="text-xs text-gray-500">${r.Hora}</div></td>
+                                <td class="px-4 py-3"><div class="font-medium">${v === 'carregamento' ? r.Pazeiro : r.Tratador}</div><div class="text-xs text-gray-500 truncate max-w-[150px]" title="${r['Vagão']}">${r['Vagão']}</div></td>
+                                <td class="px-4 py-3 text-gray-600">${r.Localidade}</td>
+                                ${v === 'distribuicao' ? `<td class="px-4 py-3"><div class="font-medium">${r.Curral}</div><div class="text-xs text-gray-500">${r.Lote}</div></td>` : ''}
+                                <td class="px-4 py-3 text-gray-600">${r.Dieta}</td>
+                                <td class="px-4 py-3 font-medium text-gray-800">${v === 'carregamento' ? r.Ingrediente : `${r['Plano Alimentar (%)']}%`}</td>
+                                <td class="px-4 py-3 text-right text-gray-500">${r['Previsto (kg)']} kg</td>
+                                <td class="px-4 py-3 text-right font-medium">${v === 'carregamento' ? r['Carregado (kg)'] : r['Distribuído (kg)']} kg</td>
+                                <td class="px-4 py-3 text-center"><span class="font-medium ${r._desvioKg > 0 ? 'text-blue-600' : r._desvioKg < 0 ? 'text-red-600' : 'text-gray-500'}">${r['Desvio (%)']}</span></td>
+                                <td class="px-4 py-3 text-center"><span class="px-2.5 py-1 rounded-full text-xs font-bold ${sc}">${r.Status || '-'}</span></td>
+                            </tr>`;
+                    }).join('');
+                }
+
+                return `
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div class="p-5 border-b flex justify-between items-center bg-gray-50">
+                            <h3 class="text-lg font-semibold">Auditoria de Dados - ${v === 'carregamento' ? 'Carregamento' : v === 'distribuicao' ? 'Distribuição' : v === 'estoque' ? 'Estoque' : v === 'tendencia' ? 'Histórico Semanal' : 'Ocorrências'}</h3>
+                            <span class="text-sm text-gray-500">${data.length} registros (Filtros Aplicados)</span>
+                        </div>
+                        <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+                            <table class="min-w-full text-sm text-left whitespace-nowrap">
+                                <thead class="text-xs text-gray-500 uppercase bg-gray-100 sticky top-0 z-10">${thHtml}</thead>
+                                <tbody>${tbodyHtml}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            },
+
+            render: function() {
+                const s = this.state;
+                let mainContent = '';
+
+                if (s.activeTab === 'import') {
+                    mainContent = this.renderImport();
+                } else if (s.activeTab === 'dashboard') {
+                    mainContent = this.renderDashboard();
+                } else if (s.activeTab === 'data') {
+                    this.calculateDerived(); // Garante o sync
+                    mainContent = this.renderRawData();
+                }
+
+                document.getElementById('app').innerHTML = `
+                    ${this.renderNavigation()}
+                    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                        ${this.renderViewSelector()}
+                        ${mainContent}
+                    </main>
+                `;
+                
+                // Atualizar email do usuário
+                const userInfoEl = document.getElementById('user-info');
+                if (userInfoEl && currentUser) {
+                    userInfoEl.textContent = currentUser.email;
+                }
+                
+                lucide.createIcons();
+            }
+        };
+
+        // ==========================================
+        // 7. INICIALIZAR A APLICAÇÃO
+        // ==========================================
+        window.onload = function() { App.init(); };
+
+    </script>
+</body>
+</html>
