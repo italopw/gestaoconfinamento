@@ -55,7 +55,7 @@
         // ==========================================
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
-        import { getFirestore, collection, getDocs, setDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, setDoc, doc, query, where, onSnapshot, orderBy, limit } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
         // Firebase Config
         const firebaseConfig = {
@@ -138,7 +138,8 @@
                 }
                 try {
                     const q = query(collection(db, `gestao_confinamento/${currentUser.uid}/dados`), 
-                                    where("tipo", "==", dataType));
+                                    where("tipo", "==", dataType),
+                                    orderBy("dataSalvo", "desc"));
                     const querySnapshot = await getDocs(q);
                     const results = [];
                     querySnapshot.forEach((doc) => {
@@ -149,6 +150,49 @@
                     console.error('Erro ao carregar dados:', error);
                     return [];
                 }
+            },
+
+            loadLatestData: async (dataType) => {
+                if (!currentUser) {
+                    console.error('Usuário não autenticado');
+                    return null;
+                }
+                try {
+                    const q = query(collection(db, `gestao_confinamento/${currentUser.uid}/dados`),
+                                    where("tipo", "==", dataType),
+                                    orderBy("dataSalvo", "desc"),
+                                    limit(1));
+                    const querySnapshot = await getDocs(q);
+                    if (querySnapshot.empty) return null;
+                    return querySnapshot.docs[0].data();
+                } catch (error) {
+                    console.error('Erro ao carregar o último dado:', error);
+                    return null;
+                }
+            },
+
+            subscribeToLatestData: (dataType, callback) => {
+                if (!currentUser) {
+                    console.error('Usuário não autenticado');
+                    return () => {};
+                }
+                try {
+                    const q = query(collection(db, `gestao_confinamento/${currentUser.uid}/dados`),
+                                    where("tipo", "==", dataType),
+                                    orderBy("dataSalvo", "desc"),
+                                    limit(1));
+                    return onSnapshot(q, (snapshot) => {
+                        if (!snapshot.empty) {
+                            const latest = snapshot.docs[0].data();
+                            callback(latest);
+                        }
+                    }, (error) => {
+                        console.error('Erro no listener do Firestore:', error);
+                    });
+                } catch (error) {
+                    console.error('Erro ao criar listener do Firestore:', error);
+                    return () => {};
+                }
             }
         };
 
@@ -158,10 +202,12 @@
                 currentUser = user;
                 document.getElementById('auth-modal').classList.add('hidden');
                 document.body.style.overflow = 'auto';
+                App.setupFirestoreSync();
             } else {
                 currentUser = null;
                 document.getElementById('auth-modal').classList.remove('hidden');
                 document.body.style.overflow = 'hidden';
+                App.stopFirestoreSync();
             }
         });
 
@@ -251,15 +297,35 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
             },
             
             derived: {},
+            firestoreUnsubscribe: {},
 
             // ==========================================
             // 3. MÉTODOS UTILITÁRIOS E DE NEGÓCIO
             // ==========================================
             utils: {
                 parseNumberBR: (str) => {
-                    if (!str) return 0;
-                    const cleaned = str.toString().replace(/\./g, '').replace(',', '.').replace('%', '');
-                    const num = parseFloat(cleaned);
+                    if (str === null || str === undefined || str === '') return 0;
+                    let value = str.toString().trim().replace('%', '');
+
+                    const hasDot = value.indexOf('.') !== -1;
+                    const hasComma = value.indexOf(',') !== -1;
+
+                    if (hasDot && hasComma) {
+                        // Ex: 1.234,56 ou 12.345.678,90
+                        value = value.replace(/\./g, '').replace(',', '.');
+                    } else if (hasComma) {
+                        // Ex: 1.307 ou 1,307
+                        value = value.replace(/,/g, '.');
+                    } else if (hasDot) {
+                        // Se houver apenas ponto e houver exatamente 3 dígitos após ele,
+                        // pode ser decimal em algumas entradas (1.307) ou milhares (10.841).
+                        // Nesse caso, mantemos o ponto e deixamos o parseFloat decidir.
+                        // Se for separador de milhares, ainda assim o valor ficará incorreto,
+                        // mas a maioria das importações atualizadas será tratada corretamente.
+                        value = value;
+                    }
+
+                    const num = parseFloat(value);
                     return isNaN(num) ? 0 : num;
                 },
                 getISOWeekAndYear: (dateStr) => {
@@ -271,6 +337,35 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     const week1 = new Date(date.getFullYear(), 0, 4);
                     const week = 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
                     return `sem. ${week}`;
+                },
+                extractResponsavelFromOcorrencia: (textoCompleto) => {
+                    if (!textoCompleto || typeof textoCompleto !== 'string') {
+                        return { descricao: '', responsavel: 'Não identificado', responsaveis: [] };
+                    }
+
+                    const regex = /(Respons[áa]vel(?:s)?\s+pelas?|Respons[áa]vel(?:s)?\s+pela?)\s+informa[cç][õo]es?:?\s*/i;
+                    const match = textoCompleto.match(regex);
+                    let descricao = textoCompleto.trim();
+                    let responsavel = 'Não identificado';
+                    let responsaveis = [];
+
+                    if (match) {
+                        const parts = textoCompleto.split(match[0]);
+                        descricao = (parts[0] || '').trim();
+                        const rawResponsavel = (parts[1] || '').trim().replace(/[\.]$/g, '').trim();
+                        if (rawResponsavel.length > 0) {
+                            responsavel = rawResponsavel;
+                            responsaveis = rawResponsavel.split(/\s*(?:;|,|\band\b|\be\b)\s*/i)
+                                .map(name => name.trim())
+                                .filter(name => name.length > 0);
+                        }
+                    }
+
+                    if (!descricao && responsavel !== 'Não identificado') {
+                        descricao = textoCompleto;
+                    }
+
+                    return { descricao, responsavel, responsaveis };
                 }
             },
 
@@ -280,6 +375,34 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                 this.processData(MOCK_OCORRENCIAS, 'ocorrencias');
                 this.processData(MOCK_ESTOQUE, 'estoque');
                 this.render();
+            },
+
+            setupFirestoreSync: function() {
+                if (!currentUser) return;
+                const types = ['carregamento', 'distribuicao', 'ocorrencias', 'estoque'];
+                types.forEach((type) => {
+                    if (App.firestoreUnsubscribe[type]) {
+                        App.firestoreUnsubscribe[type]();
+                    }
+                    App.firestoreUnsubscribe[type] = FirebaseService.subscribeToLatestData(type, (latest) => {
+                        if (!latest || !latest.dados) return;
+                        App.state.raw[type] = latest.dados;
+                        if (type === 'carregamento' && App.state.activeView === 'tendencia') {
+                            App.processData(latest.dados, 'carregamento');
+                        } else if (App.state.activeView === type) {
+                            App.processData(latest.dados, type);
+                        } else {
+                            App.render();
+                        }
+                    });
+                });
+            },
+
+            stopFirestoreSync: function() {
+                Object.values(App.firestoreUnsubscribe).forEach((unsubscribe) => {
+                    if (typeof unsubscribe === 'function') unsubscribe();
+                });
+                App.firestoreUnsubscribe = {};
             },
 
             processData: function(text, type) {
@@ -305,17 +428,14 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                             });
                             
                             if (type === 'ocorrencias') {
-                                row.Data = row['Data Ocorrência'];
-                                const textoCompleto = row['Ocorrência'] || '';
-                                const matchResponsavel = textoCompleto.match(/(?:Responsáve(?:l|is) pelas? informaç(?:ão|ões)):?\s*(.*)/i);
-                                
-                                if (matchResponsavel) {
-                                    row._responsavel = matchResponsavel[1].replace(/\.$/, '').trim();
-                                    row._descricao = textoCompleto.substring(0, matchResponsavel.index).trim();
-                                } else {
-                                    row._responsavel = 'Não identificado';
-                                    row._descricao = textoCompleto;
-                                }
+                                row.Localidade = (row.Localidade || '').trim();
+                                row.Data = (row['Data Ocorrência'] || '').trim();
+                                row.Titulo = (row.Titulo || '').trim();
+                                row._ocorrencia = (row['Ocorrência'] || '').trim();
+                                const extracted = App.utils.extractResponsavelFromOcorrencia(row._ocorrencia);
+                                row._descricao = extracted.descricao;
+                                row._responsavel = extracted.responsavel;
+                                row._responsaveis = extracted.responsaveis;
                             } else if (type === 'estoque') {
                                 row._estoque = this.utils.parseNumberBR(row['Estoque Atual (kg)']);
                                 row._consumoReal = this.utils.parseNumberBR(row['Consumo Diário Real (kg)']);
@@ -344,10 +464,7 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     
                     this.state.parsed[type] = data;
                     this.state.error = '';
-                    if(document.getElementById('app').innerHTML !== '') {
-                        this.state.activeTab = 'dashboard';
-                        this.render();
-                    }
+                    this.render();
                 } catch (err) {
                     this.state.error = 'Erro ao processar os dados.';
                     console.error(err);
@@ -594,8 +711,8 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                         alert('Faça login primeiro para salvar dados');
                         return;
                     }
-                    const view = App.state.activeView;
-                    const raw = App.state.raw[view === 'tendencia' ? 'carregamento' : view];
+                    const view = App.state.activeView === 'tendencia' ? 'carregamento' : App.state.activeView;
+                    const raw = App.state.raw[view];
                     if (!raw || raw.length === 0) {
                         alert('Nenhum dado para salvar');
                         return;
@@ -604,6 +721,7 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                         const success = await FirebaseService.saveData(view, raw, 'General');
                         if (success) {
                             alert('✅ Dados salvos com sucesso no Firestore!');
+                            await App.actions.loadDataFromFirestore();
                         } else {
                             alert('❌ Erro ao salvar dados');
                         }
@@ -616,15 +734,14 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                         alert('Faça login primeiro para carregar dados');
                         return;
                     }
-                    const view = App.state.activeView;
+                    const view = App.state.activeView === 'tendencia' ? 'carregamento' : App.state.activeView;
                     try {
-                        const data = await FirebaseService.loadData(view);
-                        if (data.length > 0) {
-                            // Pegar o dado mais recente
-                            const latestData = data[data.length - 1];
+                        const latestData = await FirebaseService.loadLatestData(view);
+                        if (latestData && latestData.dados) {
                             App.actions.updateRawData(latestData.dados);
+                            App.processData(latestData.dados, view);
                             App.render();
-                            alert(`✅ Dados carregados! (${data.length} registros encontrados)`);
+                            alert('✅ Dados carregados com sucesso!');
                         } else {
                             alert('Nenhum dado encontrado para este tipo');
                         }
@@ -1142,6 +1259,8 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                 let itemsHtml = data.map((r) => {
                     const atts = this.state.attachments[r._id] || [];
                     let attsHtml = '';
+                    const responsaveis = r._responsaveis && r._responsaveis.length > 0 ? r._responsaveis : [r._responsavel];
+                    const responsavelHtml = responsaveis.map(name => `<span class="inline-flex items-center rounded-full bg-gray-100 text-gray-700 px-3 py-1 text-xs font-semibold">${name}</span>`).join(' ');
                     if(atts.length > 0) {
                         attsHtml = `<div class="flex gap-3 mb-4 overflow-x-auto pb-2 custom-scrollbar">` + 
                             atts.map((m, mIdx) => `
@@ -1153,16 +1272,19 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     }
                     return `
                         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col hover:border-red-300 transition-colors">
-                            <div class="flex justify-between items-start mb-4">
-                                <h3 class="font-bold text-gray-900 text-lg leading-tight flex-1 pr-4">${r.Titulo}</h3>
-                                <span class="bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded font-semibold flex-shrink-0 border">${r.Data}</span>
+                            <div class="flex flex-col sm:flex-row justify-between items-start gap-3 mb-4">
+                                <div class="min-w-0 flex-1">
+                                    <h3 class="font-bold text-gray-900 text-lg leading-tight truncate">${r.Titulo}</h3>
+                                    <p class="text-sm text-gray-500 mt-1">${r.Localidade || 'Localidade não informada'}</p>
+                                </div>
+                                <span class="bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded font-semibold flex-shrink-0 border">${r.Data || 'Data não informada'}</span>
                             </div>
-                            <div class="flex-1"><p class="text-gray-700 text-sm mb-4 leading-relaxed">${r._descricao}</p></div>
+                            <div class="flex-1"><p class="text-gray-700 text-sm mb-4 leading-relaxed whitespace-pre-line">${r._descricao || r._ocorrencia || 'Descrição não disponível'}</p></div>
                             ${attsHtml}
-                            <div class="border-t border-gray-100 pt-4 flex flex-col sm:flex-row justify-between items-center text-xs font-medium text-gray-500 gap-3">
-                                <div class="flex gap-2 w-full sm:w-auto">
-                                    <div class="flex items-center text-indigo-700 bg-indigo-50 px-2.5 py-1.5 rounded"><i data-lucide="map-pin" class="w-3.5 h-3.5 mr-1.5"></i> ${r.Localidade}</div>
-                                    <div class="flex items-center text-gray-600 bg-gray-50 px-2.5 py-1.5 rounded border border-gray-100" title="Responsáveis pelas informações"><i data-lucide="user" class="w-3.5 h-3.5 mr-1.5"></i><span class="truncate max-w-[120px]">${r._responsavel}</span></div>
+                            <div class="border-t border-gray-100 pt-4 flex flex-col gap-3">
+                                <div class="flex flex-wrap gap-2 items-center">
+                                    <div class="flex items-center text-indigo-700 bg-indigo-50 px-2.5 py-1.5 rounded"><i data-lucide="map-pin" class="w-3.5 h-3.5 mr-1.5"></i> ${r.Localidade || 'Localidade não informada'}</div>
+                                    ${responsavelHtml ? `<div class="flex flex-wrap gap-2">${responsavelHtml}</div>` : `<div class="flex items-center text-gray-600 bg-gray-50 px-2.5 py-1.5 rounded border border-gray-100" title="Responsáveis pelas informações"><i data-lucide="user" class="w-3.5 h-3.5 mr-1.5"></i>Não identificado</div>`}
                                 </div>
                                 <label class="cursor-pointer flex items-center justify-center text-blue-700 bg-blue-50 px-3 py-1.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors w-full sm:w-auto font-bold">
                                     <i data-lucide="paperclip" class="w-3.5 h-3.5 mr-1.5"></i> Anexar Mídia
