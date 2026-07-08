@@ -138,8 +138,7 @@
                 }
                 try {
                     const q = query(collection(db, `gestao_confinamento/${currentUser.uid}/dados`), 
-                                    where("tipo", "==", dataType),
-                                    orderBy("dataSalvo", "desc"));
+                                    where("tipo", "==", dataType));
                     const querySnapshot = await getDocs(q);
                     const results = [];
                     querySnapshot.forEach((doc) => {
@@ -159,12 +158,21 @@
                 }
                 try {
                     const q = query(collection(db, `gestao_confinamento/${currentUser.uid}/dados`),
-                                    where("tipo", "==", dataType),
-                                    orderBy("dataSalvo", "desc"),
-                                    limit(1));
+                                    where("tipo", "==", dataType));
                     const querySnapshot = await getDocs(q);
                     if (querySnapshot.empty) return null;
-                    return querySnapshot.docs[0].data();
+                    const latestDoc = querySnapshot.docs.reduce((latest, current) => {
+                        const currentData = current.data();
+                        const latestData = latest.data();
+                        const currentTime = currentData.dataSalvo && typeof currentData.dataSalvo.toMillis === 'function'
+                            ? currentData.dataSalvo.toMillis()
+                            : new Date(currentData.dataSalvo).getTime();
+                        const latestTime = latestData.dataSalvo && typeof latestData.dataSalvo.toMillis === 'function'
+                            ? latestData.dataSalvo.toMillis()
+                            : new Date(latestData.dataSalvo).getTime();
+                        return currentTime > latestTime ? current : latest;
+                    }, querySnapshot.docs[0]);
+                    return latestDoc.data();
                 } catch (error) {
                     console.error('Erro ao carregar o último dado:', error);
                     return null;
@@ -178,13 +186,21 @@
                 }
                 try {
                     const q = query(collection(db, `gestao_confinamento/${currentUser.uid}/dados`),
-                                    where("tipo", "==", dataType),
-                                    orderBy("dataSalvo", "desc"),
-                                    limit(1));
+                                    where("tipo", "==", dataType));
                     return onSnapshot(q, (snapshot) => {
                         if (!snapshot.empty) {
-                            const latest = snapshot.docs[0].data();
-                            callback(latest);
+                            const latestDoc = snapshot.docs.reduce((latest, current) => {
+                                const currentData = current.data();
+                                const latestData = latest.data();
+                                const currentTime = currentData.dataSalvo && typeof currentData.dataSalvo.toMillis === 'function'
+                                    ? currentData.dataSalvo.toMillis()
+                                    : new Date(currentData.dataSalvo).getTime();
+                                const latestTime = latestData.dataSalvo && typeof latestData.dataSalvo.toMillis === 'function'
+                                    ? latestData.dataSalvo.toMillis()
+                                    : new Date(latestData.dataSalvo).getTime();
+                                return currentTime > latestTime ? current : latest;
+                            }, snapshot.docs[0]);
+                            callback(latestDoc.data());
                         }
                     }, (error) => {
                         console.error('Erro no listener do Firestore:', error);
