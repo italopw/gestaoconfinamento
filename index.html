@@ -309,7 +309,9 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                 
                 attachments: {},
                 
-                filters: { data: 'Todas', localidade: 'Todas', dieta: 'Todas', ingrediente: 'Todos' }
+                filters: { data: 'Todas', localidade: 'Todas', dieta: 'Todas', ingrediente: 'Todos', status: 'Todos', curral: 'Todos' },
+                
+                uiState: { showDeviationDetails: 'none' } // 'none', 'positive', 'negative'
             },
             
             derived: {},
@@ -382,6 +384,26 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     }
 
                     return { descricao, responsavel, responsaveis };
+                },
+                getWeekInfo: (date) => {
+                    const d = new Date(date);
+                    d.setHours(0, 0, 0, 0);
+                    
+                    // ISO week number
+                    d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+                    const week1 = new Date(d.getFullYear(), 0, 4);
+                    const weekNumber = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+
+                    // Get Monday of the week
+                    const currentDay = date.getDay();
+                    const diff = date.getDate() - currentDay + (currentDay === 0 ? -6 : 1); // adjust when day is sunday
+                    const monday = new Date(date.setDate(diff));
+                    const sunday = new Date(monday);
+                    sunday.setDate(monday.getDate() + 6);
+
+                    const formatDate = (dt) => `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}`;
+                    
+                    return { weekNumber, range: `${formatDate(monday)} a ${formatDate(sunday)}` };
                 }
             },
 
@@ -464,15 +486,14 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                                 row._autonomiaReal = row._consumoReal > 0 ? Math.floor(row._estoque / row._consumoReal) : 0;
                                 row._autonomiaProj = row._consumoProj > 0 ? Math.floor(row._estoque / row._consumoProj) : 0;
                             } else {
-                                row._previsto = this.utils.parseNumberBR(row['Previsto (kg)']);
-                                row._desvioKg = this.utils.parseNumberBR(row['Desvio (kg)']);
-                                row._desvioPerc = this.utils.parseNumberBR(row['Desvio (%)']);
-                                
                                 if (type === 'carregamento') {
                                     row._realizado = this.utils.parseNumberBR(row['Carregado (kg)']);
                                 } else {
                                     row._realizado = this.utils.parseNumberBR(row['Distribuído (kg)']);
                                 }
+                                row._previsto = this.utils.parseNumberBR(row['Previsto (kg)']);
+                                row._desvioKg = row._realizado - row._previsto; // Recalcula o desvio para garantir a precisão
+                                row._desvioPerc = row._previsto > 0 ? (row._desvioKg / row._previsto) * 100 : 0;
                             }
                             data.push(row);
                         }
@@ -553,10 +574,11 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     this.state.parsed.ocorrencias;
 
                 // Opções de Filtro
-                const filterOptions = { datas: [], localidades: [], dietas: [], ingredientes: [] };
+                const filterOptions = { datas: [], localidades: [], dietas: [], ingredientes: [], currais: [] };
                 if (rawCurrentData && rawCurrentData.length > 0) {
                     filterOptions.datas = ['Todas', ...Array.from(new Set(rawCurrentData.map(d => d.Data))).filter(Boolean).sort()];
                     filterOptions.localidades = ['Todas', ...Array.from(new Set(rawCurrentData.map(d => d.Localidade))).filter(Boolean).sort()];
+                    if (view === 'distribuicao') filterOptions.currais = ['Todos', ...Array.from(new Set(rawCurrentData.map(d => d.Curral))).filter(Boolean).sort()];
                     filterOptions.dietas = ['Todas', ...Array.from(new Set(rawCurrentData.map(d => d.Dieta))).filter(Boolean).sort()];
                     filterOptions.ingredientes = ['Todos', ...Array.from(new Set(rawCurrentData.map(d => d.Ingrediente))).filter(Boolean).sort()];
                 }
@@ -572,7 +594,9 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     }
                     const matchDieta = f.dieta === 'Todas' || row.Dieta === f.dieta;
                     const matchIng = f.ingrediente === 'Todos' || row.Ingrediente === f.ingrediente;
-                    return matchData && matchLoc && matchDieta && matchIng;
+                    const matchCurral = f.curral === 'Todos' || row.Curral === f.curral;
+                    const matchStatus = f.status === 'Todos' || (row.Status && row.Status.toUpperCase() === f.status);
+                    return matchData && matchLoc && matchDieta && matchIng && matchStatus && matchCurral;
                 });
 
                 // Stats Carregamento / Distribuição
@@ -601,9 +625,11 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                             operadores[opNome].previstoKg += row._previsto;
 
                             const itemNome = row[tipoItem] || 'Não Identificado';
-                            if (!itens[itemNome]) itens[itemNome] = { nome: itemNome, previstoKg: 0, realizadoKg: 0 };
+                            if (!itens[itemNome]) itens[itemNome] = { nome: itemNome, previstoKg: 0, realizadoKg: 0, desvioPositivoKg: 0, desvioNegativoKg: 0 };
                             itens[itemNome].previstoKg += row._previsto;
                             itens[itemNome].realizadoKg += row._realizado;
+                            if (row._desvioKg > 0) itens[itemNome].desvioPositivoKg += row._desvioKg;
+                            if (row._desvioKg < 0) itens[itemNome].desvioNegativoKg += row._desvioKg;
                         });
 
                         const rankingOperadores = Object.values(operadores).map(op => ({
@@ -612,7 +638,7 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
 
                         const analiseItens = Object.values(itens).map(i => {
                             const diferencaKg = i.realizadoKg - i.previstoKg;
-                            return { ...i, diferencaKg, diferencaPerc: i.previstoKg > 0 ? (diferencaKg / i.previstoKg) * 100 : 0 };
+                            return { ...i, diferencaKg, diferencaPerc: i.previstoKg > 0 ? (diferencaKg / i.previstoKg) * 100 : 0, desvioAbsoluto: i.desvioPositivoKg + Math.abs(i.desvioNegativoKg) };
                         }).sort((a, b) => Math.abs(b.diferencaPerc) - Math.abs(a.diferencaPerc));
 
                         stats = {
@@ -696,7 +722,23 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     statsTendencia = { semanas, proj1: `sem. ${maxWeekNum + 1}`, proj2: `sem. ${maxWeekNum + 2}`, itens, totalRegistros: filteredData.length };
                 }
 
-                this.derived = { filterOptions, filteredData, stats, statsOcorrencias, statsEstoque, statsTendencia, derivedTendencia };
+                // Semana de Referência
+                let semanaReferencia = null;
+                if (filteredData.length > 0) {
+                    const dates = filteredData
+                        .map(r => r.Data ? r.Data.split('/') : null)
+                        .filter(Boolean)
+                        .map(parts => new Date(parts[2], parts[1] - 1, parts[0]))
+                        .filter(d => !isNaN(d));
+
+                    if (dates.length > 0) {
+                        const maxDate = new Date(Math.max.apply(null, dates));
+                        semanaReferencia = App.utils.getWeekInfo(maxDate);
+                    }
+                }
+
+
+                this.derived = { filterOptions, filteredData, stats, statsOcorrencias, statsEstoque, statsTendencia, derivedTendencia, semanaReferencia };
             },
 
             // ==========================================
@@ -705,8 +747,9 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
             actions: {
                 setActiveTab: (tab) => { App.state.activeTab = tab; App.render(); },
                 setActiveView: (view) => { 
-                    App.state.activeView = view; 
-                    App.state.filters = { data: 'Todas', localidade: 'Todas', dieta: 'Todas', ingrediente: 'Todos' };
+                    App.state.uiState.showDeviationDetails = 'none';
+                    App.state.activeView = view;
+                    App.state.filters = { data: 'Todas', localidade: 'Todas', dieta: 'Todas', ingrediente: 'Todos', status: 'Todos', curral: 'Todos' };
                     App.render(); 
                 },
                 setFilter: (key, val) => { App.state.filters[key] = val; App.render(); },
@@ -803,6 +846,11 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     App.state.parsed.estoque[idx] = row;
                     // Re-renderizar
                     App.calculateDerived();
+                    App.render();
+                },
+                toggleDeviationDetails: (detailType) => {
+                    const current = App.state.uiState.showDeviationDetails;
+                    App.state.uiState.showDeviationDetails = current === detailType ? 'none' : detailType;
                     App.render();
                 },
                 handleLogout: () => {
@@ -910,14 +958,15 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     const yP = getYTon(d.prev), hP = baseLineY - yP, yR = getYTon(d.real), hR = baseLineY - yR, yPerc = getYPerc(d.perc);
                     const labelStr = d.label.length > 18 ? d.label.substring(0, 18) + '...' : d.label;
                     
+                    // Posição Y para o rótulo de %: acima da barra mais alta + um espaçamento
+                    const labelYPos = Math.min(yP, yR) - 8;
+
                     svgContent += `
-                        <rect x="${xP}" y="${yP}" width="${barW}" height="${hP}" fill="#1e3a8a" />
-                        <rect x="${xR}" y="${yR}" width="${barW}" height="${hR}" fill="#c2410c" />
+                        <rect x="${xP}" y="${yP}" width="${barW}" height="${hP}" fill="#1e3a8a" rx="1" />
+                        <rect x="${xR}" y="${yR}" width="${barW}" height="${hR}" fill="#c2410c" rx="1" />
                         <text x="${xC}" y="${baseLineY + 20}" font-size="11" fill="#475569" text-anchor="middle" font-weight="bold">${labelStr}</text>
-                    `;
-                    if(hP > 40) svgContent += `<text x="${xP + barW / 2 + 4}" y="${baseLineY - 8}" font-size="10" fill="white" text-anchor="start" font-weight="bold" transform="rotate(-90 ${xP + barW / 2 + 4} ${baseLineY - 8})">${d.prev.toFixed(1)}</text>`;
-                    if(hR > 40) svgContent += `<text x="${xR + barW / 2 + 4}" y="${baseLineY - 8}" font-size="10" fill="white" text-anchor="start" font-weight="bold" transform="rotate(-90 ${xR + barW / 2 + 4} ${baseLineY - 8})">${d.real.toFixed(1)}</text>`;
-                    svgContent += `
+                        <text x="${xP + barW / 2}" y="${yP + 15}" font-size="10" fill="white" text-anchor="middle" font-weight="bold" class="${hP < 25 ? 'hidden' : ''}">${d.prev.toFixed(1)}</text>
+                        <text x="${xR + barW / 2}" y="${yR + 15}" font-size="10" fill="white" text-anchor="middle" font-weight="bold" class="${hR < 25 ? 'hidden' : ''}">${d.real.toFixed(1)}</text>
                         <circle cx="${xC}" cy="${yPerc}" r="4" fill="white" stroke="#d97706" stroke-width="2.5" />
                         <g transform="translate(${xC - 22}, ${yPerc - 26})">
                             <rect width="44" height="18" fill="white" stroke="#16a34a" stroke-width="1.2" rx="2" />
@@ -1139,6 +1188,7 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                 
                 if (v !== 'estoque' && v !== 'tendencia') html += this.renderSlicerBox('Data', o.datas, f.data, 'data');
                 if (v !== 'estoque') html += this.renderSlicerBox('Localidade', o.localidades, f.localidade, 'localidade');
+                if (v === 'distribuicao') html += this.renderSlicerBox('Curral / Lote', o.currais, f.curral, 'curral');
                 if (v !== 'ocorrencias' && v !== 'estoque' && v !== 'tendencia') html += this.renderSlicerBox('Dieta', o.dietas, f.dieta, 'dieta');
                 if (v === 'carregamento' || v === 'estoque' || v === 'tendencia') html += this.renderSlicerBox('Ingrediente', o.ingredientes, f.ingrediente, 'ingrediente');
                 
@@ -1149,6 +1199,7 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
             renderDashStats: function(v, st) {
                 if(!st) return '';
                 const colorBase = v === 'carregamento' ? 'blue' : 'indigo';
+                const f = this.state.filters;
                 const bgTitle = v === 'carregamento' ? '#b4c6e7' : '#fce4d6';
                 const icn = v === 'carregamento' ? 'users' : 'users'; // reusing users for both
 
@@ -1172,12 +1223,14 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     const isPos = i.diferencaPerc > 0;
                     const above = Math.abs(i.diferencaPerc) > st.tolerance;
                     const bCol = above ? 'bg-red-500' : (isPos ? 'bg-blue-500' : 'bg-orange-400');
-                    const w = Math.min(Math.abs(i.diferencaPerc) * (100 / st.tolerance), 100);
+                    const w = Math.min(Math.abs(i.diferencaPerc) * (100 / (st.tolerance * 1.5)), 100);
                     tableHtml += `
                         <tr class="border-b border-gray-200 hover:bg-gray-50 transition-colors bg-white">
                             <td class="px-4 py-2 font-medium text-gray-800 border-r border-gray-200">${i.nome}</td>
                             <td class="px-4 py-2 text-right border-r border-gray-200">${i.previstoKg.toLocaleString('pt-BR')}</td>
                             <td class="px-4 py-2 text-right font-medium border-r border-gray-200">${i.realizadoKg.toLocaleString('pt-BR')}</td>
+                            <td class="px-4 py-2 text-right font-bold border-r border-gray-200 bg-blue-50 text-blue-700">${i.desvioPositivoKg > 0 ? '+' : ''}${i.desvioPositivoKg.toLocaleString('pt-BR')}</td>
+                            <td class="px-4 py-2 text-right font-bold border-r border-gray-200 bg-red-50 text-red-700">${i.desvioNegativoKg.toLocaleString('pt-BR')}</td>
                             <td class="px-4 py-2 text-right font-bold border-r border-gray-200 ${i.diferencaKg > 0 ? 'text-blue-600' : i.diferencaKg < 0 ? 'text-orange-600' : 'text-gray-500'}">${i.diferencaKg > 0 ? '+' : ''}${i.diferencaKg.toLocaleString('pt-BR')}</td>
                             <td class="px-4 py-2">
                                 <div class="flex items-center justify-end space-x-2">
@@ -1188,11 +1241,52 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                         </tr>`;
                 });
 
+                const renderDetailTable = (items, type) => {
+                    if (items.length === 0) return `<p class="text-center text-gray-500 py-4">Nenhum item com desvio ${type === 'positive' ? 'de excesso' : 'de falta'} encontrado.</p>`;
+                    const color = type === 'positive' ? 'blue' : 'red';
+                    return `
+                        <table class="min-w-full text-sm text-left whitespace-nowrap">
+                            <thead class="text-xs uppercase font-bold bg-${color}-100 text-${color}-900">
+                                <tr>
+                                    <th class="px-4 py-3 border-r border-${color}-200">${st.tipoItem}</th>
+                                    <th class="px-4 py-3 text-right border-r border-${color}-200">Previsto (kg)</th>
+                                    <th class="px-4 py-3 text-right border-r border-${color}-200">Realizado (kg)</th>
+                                    <th class="px-4 py-3 text-right border-r border-${color}-200">Desvio (kg)</th>
+                                    <th class="px-4 py-3 text-right">Desvio (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            ${items.map(i => {
+                                const desvioKg = type === 'positive' ? i.desvioPositivoKg : i.desvioNegativoKg;
+                                const desvioPerc = i.previstoKg > 0 ? (desvioKg / i.previstoKg) * 100 : 0;
+                                return `
+                                    <tr class="border-b border-gray-200 bg-white hover:bg-gray-50">
+                                        <td class="px-4 py-2 font-medium text-gray-800 border-r border-gray-200">${i.nome}</td>
+                                        <td class="px-4 py-2 text-right border-r border-gray-200">${i.previstoKg.toLocaleString('pt-BR')}</td>
+                                        <td class="px-4 py-2 text-right font-medium border-r border-gray-200">${i.realizadoKg.toLocaleString('pt-BR')}</td>
+                                        <td class="px-4 py-2 text-right font-bold text-${color}-700">${desvioKg > 0 ? '+' : ''}${desvioKg.toLocaleString('pt-BR')}</td>
+                                        <td class="px-4 py-2 text-right font-bold text-${color}-700">${desvioPerc > 0 ? '+' : ''}${desvioPerc.toFixed(2)}%</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                };
+                const positiveItems = st.analiseItens.filter(i => i.desvioPositivoKg > 0).sort((a,b) => b.desvioPositivoKg - a.desvioPositivoKg);
+                const negativeItems = st.analiseItens.filter(i => i.desvioNegativoKg < 0).sort((a,b) => a.desvioNegativoKg - b.desvioNegativoKg);
+
                 return `
-                    <div class="flex justify-between items-end">
-                        <div>
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
                             <h2 class="text-2xl font-bold text-gray-900">Análise de Trato - ${v === 'carregamento' ? 'Carregamento' : 'Distribuição'}</h2>
-                            <p class="text-gray-500">Baseado em ${st.totalRegistros} registros correspondentes aos filtros.</p>
+                            <p class="text-gray-500 mt-1">Baseado em ${st.totalRegistros} registros correspondentes aos filtros.</p>
+                        </div>
+                        <div class="text-right">
+                            ${this.derived.semanaReferencia ? `
+                                <div class="text-sm font-semibold text-gray-500">Semana de Referência</div>
+                                <div class="text-lg font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-lg border border-blue-200">Semana ${this.derived.semanaReferencia.weekNumber} <span class="font-normal text-gray-600">(${this.derived.semanaReferencia.range})</span></div>
+                            ` : ''}
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1205,8 +1299,11 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                             <span class="text-2xl font-bold text-gray-800">${st.totalRealizado.toLocaleString('pt-BR')}</span>
                         </div>
                         <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
-                            <span class="text-gray-500 text-sm font-medium mb-1">Desvio Absoluto Total (kg)</span>
-                            <span class="text-2xl font-bold text-orange-600">${st.totalDesvioAbsoluto.toLocaleString('pt-BR')}</span>
+                            <div class="flex items-center gap-2 text-gray-500 text-sm font-medium mb-1">
+                                <span>Soma Total dos Desvios (kg)</span>
+                                <i data-lucide="info" class="w-3.5 h-3.5 cursor-help" title="Soma de todos os desvios (positivos e negativos) em valor absoluto. Mede a ineficiência operacional total."></i>
+                            </div>
+                            <span class="text-2xl font-bold text-orange-600">${st.totalDesvioAbsoluto.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</span>
                         </div>
                         <div class="bg-gradient-to-br from-${colorBase}-600 to-${colorBase}-800 border-${colorBase}-200 p-5 rounded-xl shadow-sm border flex flex-col justify-center text-white">
                             <span class="text-white/80 text-sm font-medium mb-1">Média de Desvio Geral (%)</span>
@@ -1218,20 +1315,24 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     </div>
 
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 lg:col-span-1">
-                            <div class="flex items-center space-x-2 mb-6"><i data-lucide="check-circle" class="text-green-500 w-5 h-5"></i><h3 class="text-lg font-semibold">Status das Cargas</h3></div>
-                            <div class="space-y-4">
-                                ${['VERDE', 'AMARELO', 'VERMELHO', 'PRETO'].map(s => `
-                                    <div>
-                                        <div class="flex justify-between text-sm mb-1">
-                                                <span class="font-medium ${s==='VERDE'?'text-green-700':s==='AMARELO'?'text-yellow-600':s==='VERMELHO'?'text-red-600':'text-gray-900'}">${s==='VERDE'?'Dentro da Meta':s==='AMARELO'?'Atenção':s==='VERMELHO'?'Fora da Meta':'Crítico'} (${s})</span>
-                                            <span class="font-bold">${st.statusCount[s]}</span>
-                                        </div>
-                                            <div class="w-full bg-gray-100 rounded-full h-3">
-                                                <div class="${s==='VERDE'?'bg-green-500':s==='AMARELO'?'bg-yellow-400':s==='VERMELHO'?'bg-red-500':'bg-black'} h-3 rounded-full" style="width: ${(st.statusCount[s] / st.totalRegistros) * 100}%"></div>
-                                            </div>
-                                    </div>`).join('')}
-                            </div>
+                        <div class="lg:col-span-1">
+                            <div class="flex items-center space-x-2 mb-4"><i data-lucide="check-circle" class="text-green-500 w-5 h-5"></i><h3 class="text-lg font-semibold">Status das Cargas</h3></div>
+                            <div class="grid grid-cols-2 gap-3">
+                                ${['VERDE', 'AMARELO', 'VERMELHO', 'PRETO'].map(s => {
+                                    const labels = { VERDE: 'Dentro da Meta', AMARELO: 'Atenção', VERMELHO: 'Fora da Meta', PRETO: 'Crítico' };
+                                    const colors = { VERDE: 'green', AMARELO: 'yellow', VERMELHO: 'red', PRETO: 'gray' };
+                                    const color = colors[s];
+                                    const isSelected = f.status === s;
+                                    const newStatus = isSelected ? 'Todos' : s;
+                                    return `
+                                    <div onclick="App.actions.setFilter('status', '${newStatus}')" class="cursor-pointer p-4 rounded-lg shadow-sm border transition-all ${isSelected ? `bg-${color}-100 border-${color}-400 ring-2 ring-${color}-500` : `bg-white border-gray-200 hover:bg-${color}-50 hover:border-${color}-300`}">
+                                        <h4 class="font-bold text-sm text-${color}-800">${labels[s]}</h4>
+                                        <p class="text-2xl font-semibold text-${color}-900">${st.statusCount[s] || 0}</p>
+                                        <p class="text-xs text-gray-500">${((st.statusCount[s] / st.totalRegistros) * 100).toFixed(1)}% do total</p>
+                                    </div>
+                                    `;
+                                }).join('')}
+                            </div>                            
                         </div>
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 lg:col-span-2">
                             <div class="flex items-center space-x-2 mb-6"><i data-lucide="${icn}" class="text-${colorBase}-500 w-5 h-5"></i><h3 class="text-lg font-semibold">Ranking de Desvio por ${st.tipoOperador}</h3></div>
@@ -1247,26 +1348,48 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                                 <thead class="text-xs uppercase font-bold border-b border-gray-300 bg-[${bgTitle}] text-gray-900">
                                     <tr>
                                         <th class="px-4 py-3 border-r border-gray-300">${v === 'carregamento' ? 'INGREDIENTES' : 'DIETA'}</th>
-                                        <th class="px-4 py-3 text-right border-r border-gray-300">${v === 'carregamento' ? 'PREVISTO KG' : 'Soma de Previsto (kg)'}</th>
-                                        <th class="px-4 py-3 text-right border-r border-gray-300">${v === 'carregamento' ? 'CARREGADO KG' : 'Soma de Distribuído (kg)'}</th>
-                                        <th class="px-4 py-3 text-right border-r border-gray-300">${v === 'carregamento' ? 'DIFERENÇA KG' : 'Diferença (Kg)'}</th>
+                                        <th class="px-4 py-3 text-right border-r border-gray-300">Previsto (kg)</th>
+                                        <th class="px-4 py-3 text-right border-r border-gray-300">${v === 'carregamento' ? 'Carregado (kg)' : 'Distribuído (kg)'}</th>
+                                        <th colspan="2" class="px-4 py-3 text-center border-r border-gray-300 bg-gray-200">Valores Corrigidos</th>
+                                        <th class="px-4 py-3 text-right border-r border-gray-300">Diferença Líquida (Kg)</th>
                                         <th class="px-4 py-3 text-center w-48">%</th>
+                                    </tr>
+                                    <tr class="text-xs uppercase font-bold border-b-2 border-gray-400 bg-[${bgTitle}] text-gray-900">
+                                        <th class="px-4 py-2 border-r border-gray-300"></th>
+                                        <th class="px-4 py-2 border-r border-gray-300"></th>
+                                        <th class="px-4 py-2 border-r border-gray-300"></th>
+                                        <th class="px-4 py-2 text-right border-r border-gray-300 bg-blue-100 text-blue-800">Excesso (+Kg)</th>
+                                        <th class="px-4 py-2 text-right border-r border-gray-300 bg-red-100 text-red-800">Falta (-Kg)</th>
+                                        <th class="px-4 py-2 border-r border-gray-300"></th>
+                                        <th class="px-4 py-2"></th>
                                     </tr>
                                 </thead>
                                 <tbody>${tableHtml}</tbody>
                                 <tfoot class="font-bold border-t-2 border-gray-400 bg-[${bgTitle}] text-gray-900">
-                                    <tr>
+                                    <tr class="border-b border-gray-300">
                                         <td class="px-4 py-3 border-r border-gray-300">Total Geral</td>
-                                        <td class="px-4 py-3 text-right border-r border-gray-300">${st.totalPrevisto.toLocaleString('pt-BR')}</td>
-                                        <td class="px-4 py-3 text-right border-r border-gray-300">${st.totalRealizado.toLocaleString('pt-BR')}</td>
+                                        <td class="px-4 py-3 text-right border-r border-gray-300">${(st.analiseItens.reduce((acc, i) => acc + i.previstoKg, 0)).toLocaleString('pt-BR')}</td>
+                                        <td class="px-4 py-3 text-right border-r border-gray-300">${(st.analiseItens.reduce((acc, i) => acc + i.realizadoKg, 0)).toLocaleString('pt-BR')}</td>
+                                        <td class="px-4 py-3 text-right border-r border-gray-300 bg-blue-100 text-blue-800">${(st.analiseItens.reduce((acc, i) => acc + i.desvioPositivoKg, 0)).toLocaleString('pt-BR')}</td>
+                                        <td class="px-4 py-3 text-right border-r border-gray-300 bg-red-100 text-red-800">${(st.analiseItens.reduce((acc, i) => acc + i.desvioNegativoKg, 0)).toLocaleString('pt-BR')}</td>
                                         <td class="px-4 py-3 text-right border-r border-gray-300 ${st.totalDiferencaLiquida > 0 ? 'text-blue-800' : st.totalDiferencaLiquida < 0 ? 'text-orange-800' : 'text-gray-900'}">${st.totalDiferencaLiquida > 0 ? '+' : ''}${st.totalDiferencaLiquida.toLocaleString('pt-BR')}</td>
                                         <td class="px-0 py-0 text-right align-middle">
                                             <div class="w-full h-full px-4 py-3 flex items-center justify-center text-white ${Math.abs(st.totalDiferencaLiquidaPerc) > st.tolerance ? 'bg-red-600' : 'bg-[#00b050]'}">${st.totalDiferencaLiquidaPerc > 0 ? '+' : ''}${st.totalDiferencaLiquidaPerc.toFixed(2)}%</div>
                                         </td>
                                     </tr>
+                                    <tr class="bg-gray-200">
+                                        <td colspan="4" class="px-4 py-2 text-right font-bold text-gray-700">Soma dos Desvios Absolutos (Excesso + Falta):</td>
+                                        <td colspan="3" class="px-4 py-2 text-left font-bold text-orange-700">${(st.analiseItens.reduce((acc, i) => acc + i.desvioAbsoluto, 0)).toLocaleString('pt-BR')} kg</td>
+                                    </tr>
                                 </tfoot>
                             </table>
                         </div>
+                        <div class="mt-6 flex justify-center gap-4">
+                            <button onclick="App.actions.toggleDeviationDetails('positive')" class="px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all ${this.state.uiState.showDeviationDetails === 'positive' ? 'bg-blue-600 text-white shadow-md' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'}"><i data-lucide="zoom-in"></i>Analisar Excessos</button>
+                            <button onclick="App.actions.toggleDeviationDetails('negative')" class="px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all ${this.state.uiState.showDeviationDetails === 'negative' ? 'bg-red-600 text-white shadow-md' : 'bg-red-100 text-red-800 hover:bg-red-200'}"><i data-lucide="zoom-in"></i>Analisar Faltas</button>
+                        </div>
+                        ${this.state.uiState.showDeviationDetails === 'positive' ? `<div class="mt-4 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl"><h4 class="font-bold text-blue-800 mb-2">Detalhes dos Itens com Excesso</h4><div class="border border-blue-200 rounded-lg overflow-hidden">${renderDetailTable(positiveItems, 'positive')}</div></div>` : ''}
+                        ${this.state.uiState.showDeviationDetails === 'negative' ? `<div class="mt-4 p-4 bg-red-50 border-2 border-red-200 rounded-xl"><h4 class="font-bold text-red-800 mb-2">Detalhes dos Itens com Falta</h4><div class="border border-red-200 rounded-lg overflow-hidden">${renderDetailTable(negativeItems, 'negative')}</div></div>` : ''}
                     </div>`;
             },
 
@@ -1311,10 +1434,16 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                 }).join('');
 
                 return `
-                    <div class="flex justify-between items-end">
-                        <div>
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
                             <h2 class="text-2xl font-bold text-gray-900">Diário de Ocorrências</h2>
-                            <p class="text-gray-500">Acompanhamento e registro de imprevistos do confinamento.</p>
+                            <p class="text-gray-500 mt-1">Acompanhamento e registro de imprevistos do confinamento.</p>
+                        </div>
+                        <div class="text-right">
+                            ${this.derived.semanaReferencia ? `
+                                <div class="text-sm font-semibold text-gray-500">Semana de Referência</div>
+                                <div class="text-lg font-bold text-red-700 bg-red-50 px-3 py-1 rounded-lg border border-red-200">Semana ${this.derived.semanaReferencia.weekNumber} <span class="font-normal text-gray-600">(${this.derived.semanaReferencia.range})</span></div>
+                            ` : ''}
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1379,10 +1508,16 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     </tr>`).join('');
 
                 return `
-                    <div class="flex justify-between items-end">
-                        <div>
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
                             <h2 class="text-2xl font-bold text-gray-900">Estoque: Autonomia Farmtell vs Projeção</h2>
-                            <p class="text-gray-500">Confronto do consumo de insumos na fábrica para análise de viabilidade e dias restantes.</p>
+                            <p class="text-gray-500 mt-1">Confronto do consumo de insumos na fábrica para análise de viabilidade e dias restantes.</p>
+                        </div>
+                        <div class="text-right">
+                            ${this.derived.semanaReferencia ? `
+                                <div class="text-sm font-semibold text-gray-500">Semana de Referência</div>
+                                <div class="text-lg font-bold text-teal-700 bg-teal-50 px-3 py-1 rounded-lg border border-teal-200">Semana ${this.derived.semanaReferencia.weekNumber} <span class="font-normal text-gray-600">(${this.derived.semanaReferencia.range})</span></div>
+                            ` : ''}
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1480,8 +1615,13 @@ CRISTO REI\t121004\tDDG S\t635059,00\t51263,00\t44755,00`;
                     </tr>`).join('');
 
                 return `
-                    <div class="flex justify-between items-end">
-                        <div><h2 class="text-2xl font-bold text-gray-900">Tendência Histórica de Consumo</h2><p class="text-gray-500">Monitoramento evolutivo do consumo (Média Diária) e cruzamento direto com a Projeção (Meta PCA).</p></div>
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <h2 class="text-2xl font-bold text-gray-900">Tendência Histórica de Consumo</h2>
+                            <p class="text-gray-500 mt-1">Monitoramento evolutivo do consumo (Média Diária) e cruzamento com a Projeção (Meta PCA).</p>
+                        </div>
+                        <div class="text-right">
+                        </div>
                     </div>
                     <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                         <div class="flex items-center space-x-2 mb-6"><i data-lucide="line-chart" class="text-purple-600 w-5 h-5"></i><h3 class="text-lg font-semibold uppercase">Curva de Consumo x Projeção</h3></div>
