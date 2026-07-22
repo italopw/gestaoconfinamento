@@ -1,0 +1,2215 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FarmTell Beef - Gestão de Trato e Auditoria de Balança</title>
+    <!-- Tailwind CSS para Estilização Moderna -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome para Ícones Agrícolas e de Interface -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Custom scrollbar para melhor usabilidade */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Classe de destaque visual para o tutorial */
+        .tutorial-highlight {
+            position: relative !important;
+            z-index: 9980 !important;
+            box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.8) !important;
+            pointer-events: auto !important;
+            transition: all 0.3s ease;
+        }
+
+        /* Animação de carregamento infinito da barra de progresso da IA */
+        @keyframes infinite-scroll {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(200%); }
+        }
+        .animate-infinite-scroll {
+            animation: infinite-scroll 1.5s infinite linear;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 flex flex-col min-h-screen">
+
+    <!-- Header Principal com indicadores de nuvem ativos e botão de ajuda -->
+    <header class="bg-gradient-to-r from-emerald-800 to-green-950 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <a href="menu.html" title="Voltar ao Menu" class="flex items-center justify-center h-10 w-10 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors">
+                    <i class="fa-solid fa-table-cells-large text-lg"></i>
+                </a>
+                <div class="bg-white p-1.5 rounded-lg shadow-inner flex items-center justify-center">
+                    <span class="text-emerald-700 font-extrabold text-lg tracking-tight flex items-center">
+                        <i class="fa-solid fa-seedling mr-1 text-green-500"></i>ATTO
+                    </span>
+                </div>
+                <div class="h-6 w-px bg-emerald-600 hidden sm:block"></div>
+                <div class="text-xs sm:text-sm text-emerald-100 hidden sm:block font-medium">
+                    <span class="font-bold text-white">FarmTell</span> <span class="bg-green-500 text-emerald-950 text-[10px] px-1.5 py-0.5 rounded font-black">BEEF</span>
+                </div>
+            </div>
+            
+            <div class="flex flex-col items-center sm:items-start text-center sm:text-left">
+                <h1 class="text-sm md:text-base font-bold tracking-wide flex items-center gap-2 text-white justify-center sm:justify-start">
+                    <i class="fa-solid fa-cloud-bolt text-green-400"></i>
+                    Rastreabilidade e Trato em Tempo Real
+                </h1>
+                <span class="text-[9px] text-emerald-300 font-mono" id="user-id-badge">Carregando autenticação...</span>
+            </div>
+
+            <div class="flex items-center space-x-3">
+                <!-- Botão permanente de Ajuda/Tutorial (Programático) -->
+                <button id="btn-tutorial-start" class="bg-emerald-700 hover:bg-emerald-600 hover:scale-105 active:scale-95 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all text-emerald-100 border border-emerald-600/50 shadow">
+                    <i class="fa-solid fa-circle-question text-emerald-400"></i> Manual Explicativo
+                </button>
+                <span class="text-[10px] md:text-xs bg-emerald-950/60 border border-emerald-600 px-3 py-1 rounded-full text-emerald-200 font-mono hidden md:inline-block">
+                    Ref: 16/06/2026
+                </span>
+                <div class="bg-emerald-950/40 px-3 py-1.5 rounded-lg flex items-center gap-2 border border-emerald-700">
+                    <span class="h-2 w-2 rounded-full bg-green-400 animate-pulse" id="sync-indicator"></span>
+                    <span class="text-xs font-semibold text-emerald-200" id="sync-text">Conectando Firestore...</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4 lg:p-6 flex flex-col gap-4">
+        
+        <!-- Banner de Setup do Firebase (Injetado dinamicamente em caso de erro de conexão ou permissão) -->
+        <div id="firebase-setup-warning"></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
+            
+            <!-- Coluna da Esquerda: Lotes da Nuvem, Upload, OCR e Tabela de Configuração (7 colunas) -->
+            <div class="lg:col-span-7 flex flex-col gap-6">
+                
+                <!-- SELETOR DE LOTES E HISTÓRICO EM NUVEM (FIRESTORE) -->
+                <div id="step-lotes" class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 transition-all relative">
+                    <button data-step="1" class="btn-explainer absolute top-4 right-4 text-emerald-600 hover:text-emerald-800 text-xs font-bold flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-md" title="Ver explicação desta etapa">
+                        <i class="fa-solid fa-circle-info"></i> Notas da Etapa
+                    </button>
+                    <div class="flex flex-wrap justify-between items-center mb-3 gap-2">
+                        <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 pr-24">
+                            <i class="fa-solid fa-database text-emerald-600"></i>
+                            Banco de Dados: Controle de Lotes Diários
+                        </h2>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                        <!-- Dropdown de Lotes Carregados -->
+                        <div class="md:col-span-5">
+                            <label class="block text-[10px] text-slate-400 font-bold mb-1">Selecionar Lote Ativo:</label>
+                            <select id="tratos-selector" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer">
+                                <option value="">Aguardando conexão com banco...</option>
+                            </select>
+                        </div>
+
+                        <!-- Input para Renomear Lote Selecionado -->
+                        <div class="md:col-span-4">
+                            <label class="block text-[10px] text-slate-400 font-bold mb-1">Título do Lote:</label>
+                            <input type="text" id="trato-title-input" class="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500" value="Carregando...">
+                        </div>
+
+                        <!-- Ações de Lote -->
+                        <div class="md:col-span-3 flex gap-2 pt-4 md:pt-0">
+                            <button id="btn-create-new-trato" class="flex-1 px-2.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all shadow-sm">
+                                <i class="fa-solid fa-plus"></i> Novo Lote
+                            </button>
+                            <button id="btn-delete-trato" class="px-2.5 py-2 border border-red-200 hover:bg-red-50 text-red-500 rounded-lg text-xs font-bold flex items-center justify-center transition-all" title="Excluir Lote">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Card de Upload de Imagem de Formulação / Amostra -->
+                <div id="step-importar" class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 transition-all relative">
+                    <button data-step="2" class="btn-explainer absolute top-4 right-4 text-emerald-600 hover:text-emerald-800 text-xs font-bold flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-md" title="Ver explicação desta etapa">
+                        <i class="fa-solid fa-circle-info"></i> Notas da Etapa
+                    </button>
+                    <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+                        <h2 class="text-base font-bold text-slate-800 flex items-center gap-2 pr-24">
+                            <i class="fa-solid fa-file-import text-emerald-600"></i>
+                            1. Importar Receita de Formulação por Imagem Real
+                        </h2>
+                    </div>
+
+                    <!-- Zona de Drag and Drop -->
+                    <div id="drop-zone" class="border-2 border-dashed border-emerald-300 rounded-lg p-6 text-center hover:border-emerald-500 transition-colors cursor-pointer bg-emerald-50/20 relative">
+                        <input type="file" id="image-upload" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                        <div class="flex flex-col items-center justify-center space-y-2">
+                            <div class="p-3 bg-emerald-100 text-emerald-700 rounded-full">
+                                <i class="fa-solid fa-cloud-arrow-up text-2xl"></i>
+                            </div>
+                            <p class="text-sm font-semibold text-slate-700">Arraste a foto da receita ou cole direto (Ctrl+V)</p>
+                            <p class="text-xs text-slate-500">O sistema lerá e extrairá os dados da imagem usando Inteligência Artificial!</p>
+                        </div>
+                    </div>
+
+                    <!-- Botão de Atalho Rápido para restaurar os dados de amostra -->
+                    <div class="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-lightbulb text-amber-500 text-lg animate-bounce"></i>
+                            <span class="text-xs text-slate-600 font-medium">Preencher lote atual com a amostra padrão de <strong>image_535e23.png</strong>:</span>
+                        </div>
+                        <button id="btn-load-sample" class="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg transition-all shadow flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Aplicar Amostra
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Painel de Gerenciamento de Trato / Transição de Usuários -->
+                <div id="step-formulacao" class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex-grow flex flex-col transition-all relative">
+                    <button data-step="3" class="btn-explainer absolute top-4 right-4 text-emerald-600 hover:text-emerald-800 text-xs font-bold flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-md" title="Ver explicação desta etapa">
+                        <i class="fa-solid fa-circle-info"></i> Notas da Etapa
+                    </button>
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <div class="pr-24">
+                            <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                                <i class="fa-solid fa-calculator text-emerald-600"></i>
+                                2. Formulação Ativa & Verificação de Balança
+                            </h2>
+                            <p class="text-xs text-slate-500 mt-0.5">Sincronize metas de pesagem e aprove as comprovações fotográficas da balança física.</p>
+                        </div>
+                        <div class="flex gap-2 shrink-0">
+                            <button id="btn-add-row" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+                                <i class="fa-solid fa-plus text-emerald-600"></i> Novo Ingrediente
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Configuração de Tolerância do Desvio -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 bg-emerald-50/50 p-3 rounded-lg border border-emerald-100">
+                        <div class="flex items-center gap-2">
+                            <label class="text-xs font-bold text-emerald-800 whitespace-nowrap">Tolerância Limite de Desvio:</label>
+                            <input type="number" id="tolerance" value="5" min="1" max="20" class="w-16 px-2.5 py-1.5 border border-emerald-200 rounded-lg text-xs font-bold text-center text-emerald-900 bg-white">
+                            <span class="text-xs font-bold text-emerald-800">%</span>
+                        </div>
+                        <div class="text-right flex items-center justify-end gap-1.5 text-xs text-slate-500">
+                            <span class="inline-block w-3 h-3 bg-red-100 border border-red-300 rounded"></span> Fora de Meta
+                            <span class="inline-block w-3 h-3 bg-green-100 border border-green-300 rounded ml-2"></span> Dentro da Meta
+                        </div>
+                    </div>
+
+                    <!-- Tabela Responsiva de Formulação -->
+                    <div class="overflow-x-auto border border-slate-200 rounded-lg flex-grow">
+                        <table class="w-full text-left border-collapse min-w-[750px]" id="ingredients-table">
+                            <thead>
+                                <tr class="bg-emerald-50 border-b border-slate-200 text-slate-700 text-xs font-bold">
+                                    <th class="p-3 w-5/12">Ingrediente</th>
+                                    <th class="p-3 w-20 text-right">Alvo (kg)</th>
+                                    <th class="p-3 w-24 text-right bg-emerald-100/30">Realizado (kg)</th>
+                                    <th class="p-3 w-28 text-center">Desvio (%)</th>
+                                    <th class="p-3 w-32 text-center">Comprovação</th>
+                                    <th class="p-3 w-10 text-center"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-body" class="divide-y divide-slate-100 text-xs">
+                                <!-- Inserido dinamicamente via JS -->
+                            </tbody>
+                            <tfoot>
+                                <tr class="bg-slate-100 border-t border-slate-300 font-bold text-slate-800">
+                                    <td class="p-3 text-right">Total Calculado:</td>
+                                    <td id="total-target" class="p-3 text-right font-mono text-sm">0,00 kg</td>
+                                    <td id="total-actual" class="p-3 text-right bg-emerald-50 text-emerald-900 font-mono text-sm">0,00 kg</td>
+                                    <td id="total-deviation" class="p-3 text-center text-slate-700">0,00 kg</td>
+                                    <td id="total-photos" class="p-3 text-center text-[10px] text-slate-500">Fotos: 0/0</td>
+                                    <td class="p-3"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <!-- Botões de Ação para Transpassar Informação -->
+                    <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button id="btn-transmit" class="w-full bg-emerald-600 hover:bg-emerald-700 hover:scale-[1.01] active:scale-95 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-all flex items-center justify-center gap-2 text-sm">
+                            <i class="fa-solid fa-paper-plane animate-pulse"></i> Enviar Trato para o Motorista (Vagão)
+                        </button>
+                        <button id="btn-download-pdf" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-all flex items-center justify-center gap-2 text-sm">
+                            <i class="fa-solid fa-file-pdf"></i> Baixar Relatório com Fotos
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Coluna da Direita: Canvas Preview & Central de Monitoramento do Trato -->
+            <div class="lg:col-span-5 flex flex-col gap-6">
+                
+                <!-- Visualização Interativa via Canvas (Representação Visual do Ticket/Status) -->
+                <div id="step-preview" class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col transition-all relative">
+                    <button data-step="5" class="btn-explainer absolute top-4 right-4 text-emerald-600 hover:text-emerald-800 text-xs font-bold flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-md" title="Ver explicação desta etapa">
+                        <i class="fa-solid fa-circle-info"></i> Notas da Etapa
+                    </button>
+                    <div class="flex items-center justify-between mb-2">
+                        <h2 class="text-base font-bold text-slate-800 flex items-center gap-2 pr-24">
+                            <i class="fa-solid fa-print text-emerald-600"></i>
+                            3. Pré-visualização do Ticket de Carga
+                        </h2>
+                    </div>
+                    
+                    <p class="text-xs text-slate-500 mb-3">
+                        Documento de auditoria gerado em tempo real com as métricas e o selo de auditoria de imagens de balança.
+                    </p>
+
+                    <!-- Div Contendo o Canvas Responsivo -->
+                    <div class="border border-slate-200 rounded-lg p-2 bg-slate-100 flex items-center justify-center overflow-auto">
+                        <canvas id="preview-canvas" width="480" height="640" class="max-w-full h-auto bg-white rounded shadow-inner border border-slate-300"></canvas>
+                    </div>
+
+                    <div class="mt-3 flex items-center justify-between text-xs text-slate-500">
+                        <span><i class="fa-solid fa-arrows-spin mr-1 animate-spin text-emerald-600"></i> Auto-update ativo</span>
+                        <button id="btn-refresh-canvas" class="text-emerald-700 hover:text-emerald-900 font-semibold flex items-center gap-1">
+                            <i class="fa-solid fa-arrows-rotate"></i> Forçar Redraw
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Painel de Simulação de Recebimento de Trato (User-to-User Transition) -->
+                <div id="step-vagao" class="bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100 rounded-xl shadow-md p-5 border border-slate-700 transition-all relative">
+                    <button data-step="4" class="btn-explainer absolute top-4 right-4 text-amber-400 hover:text-amber-300 text-xs font-bold flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-md" title="Ver explicação desta etapa">
+                        <i class="fa-solid fa-circle-info"></i> Notas da Etapa
+                    </button>
+                    <div class="flex items-center justify-between mb-4 border-b border-slate-700 pb-3">
+                        <div class="flex items-center gap-2">
+                            <div class="w-8 h-8 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center border border-amber-500/40">
+                                <i class="fa-solid fa-tractor text-sm"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-xs text-slate-200 pr-24">Terminal de Campo (Vagão Misturador)</h3>
+                                <p class="text-[10px] text-slate-400">Operador: <strong class="text-amber-400">Silas (Campo)</strong></p>
+                            </div>
+                        </div>
+                        <span id="wagon-status" class="bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] px-2 py-0.5 rounded-full font-bold">Aguardando Trato</span>
+                    </div>
+
+                    <!-- Simulação de Monitor Integrado no Trator -->
+                    <div class="bg-black/40 border border-slate-700 rounded-lg p-4 font-mono text-xs text-green-400 space-y-3 relative overflow-hidden">
+                        <div class="absolute right-2 top-2 text-[8px] bg-red-600 text-white font-sans px-1 rounded animate-pulse">LIVE FEED</div>
+                        <div class="flex justify-between border-b border-green-950/40 pb-1.5 text-green-300">
+                            <span>BALANÇA INTEGRA v4.2</span>
+                            <span id="wagon-timer">--:--:--</span>
+                        </div>
+                        
+                        <!-- Lista dinâmica de telemetria / ingredientes sendo carregados -->
+                        <div id="wagon-display" class="space-y-2 py-1 overflow-y-auto max-h-[160px] border-b border-slate-800 pb-2">
+                            <p class="text-slate-400 italic text-center py-4">Aguardando recebimento de metas enviadas do escritório administrativo.</p>
+                        </div>
+
+                        <!-- Informações do Ingrediente Atual sendo carregado -->
+                        <div class="bg-emerald-950/40 border border-emerald-800/60 p-2.5 rounded text-[11px] text-emerald-300 hidden animate-fade-in" id="wagon-active-indicator">
+                            <div class="flex justify-between font-bold">
+                                <span>Item Ativo no Silo:</span>
+                                <span id="wagon-target-name" class="text-white">--</span>
+                            </div>
+                            <div class="flex justify-between text-xs mt-1">
+                                <span>Meta de Carga: <strong id="wagon-target-wt" class="text-white">0 kg</strong></span>
+                                <span>Na Balança: <strong id="wagon-current-wt" class="text-yellow-300 animate-pulse">0 kg</strong></span>
+                            </div>
+                            <!-- Barra de progresso visual de simulação -->
+                            <div class="w-full bg-emerald-900/50 rounded-full h-2 mt-2 border border-emerald-800">
+                                <div id="wagon-progress" class="bg-yellow-400 h-1.5 rounded-full" style="width: 0%"></div>
+                            </div>
+
+                            <!-- Zona Exclusiva de Envio de Foto de Comprovação da Balança -->
+                            <div class="mt-4 p-3 bg-slate-900/90 rounded border border-slate-700 flex flex-col items-center gap-2">
+                                <div class="text-center text-[10px] text-amber-400 font-bold mb-1">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> COMPROVAÇÃO DE FOTO OBRIGATÓRIA
+                                </div>
+                                
+                                <div class="flex w-full gap-2">
+                                    <button id="btn-snap-scale" class="flex-1 bg-amber-600 hover:bg-amber-700 text-slate-900 font-black py-2.5 rounded text-[10px] flex items-center justify-center gap-1 transition-colors shadow">
+                                        <i class="fa-solid fa-camera"></i> Bater Foto Balança
+                                    </button>
+                                    <label class="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2.5 rounded text-[10px] flex items-center justify-center gap-1 cursor-pointer transition-colors text-center shadow border border-slate-600">
+                                        <i class="fa-solid fa-upload"></i> Subir Foto Real
+                                        <input type="file" id="scale-photo-upload" class="hidden" accept="image/*">
+                                    </label>
+                                </div>
+                                
+                                <!-- Opção de simular discrepância/Fraude -->
+                                <div class="flex items-center gap-2 mt-2 self-start bg-slate-800 p-1.5 rounded w-full justify-between">
+                                    <span class="text-[9px] text-slate-300 font-sans">Simular Erro de Digitação (Fraude)</span>
+                                    <input type="checkbox" id="chk-simulate-fraud" class="w-3.5 h-3.5 accent-amber-500 cursor-pointer">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <button id="btn-sim-load" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-3 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed shadow" disabled>
+                            <i class="fa-solid fa-scale-balanced text-amber-500"></i> Iniciar Pesagem Manual
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- CONTAINER DO SISTEMA DE ONBOARDING / TUTORIAL PASSO A PASSO -->
+    <div id="tutorial-backdrop" class="fixed inset-0 bg-black/60 z-[9990] hidden transition-all duration-300"></div>
+    <div id="tutorial-card" class="fixed z-[10000] bg-white rounded-2xl shadow-2xl p-6 max-w-md w-[calc(100%-2rem)] border border-emerald-100 hidden transition-all duration-300 transform -translate-x-1/2 -translate-y-1/2 left-1/2 top-1/2 md:max-w-md">
+        <!-- Barra de Progresso do Tutorial -->
+        <div class="w-full bg-slate-100 h-1.5 rounded-full mb-4">
+            <div id="tutorial-progress-bar" class="bg-emerald-600 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <div class="flex justify-between items-start mb-3">
+            <span class="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full flex items-center gap-1" id="tutorial-badge">
+                <i class="fa-solid fa-graduation-cap"></i> Passo 1 de 7
+            </span>
+            <button id="btn-tutorial-close" class="text-slate-400 hover:text-slate-600 transition-colors p-1" title="Fechar manual">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+        <h4 class="font-extrabold text-slate-900 text-lg mb-2 flex items-center gap-2" id="tutorial-title">
+            <!-- Dinâmico -->
+        </h4>
+        <p class="text-slate-600 text-sm leading-relaxed mb-6" id="tutorial-text">
+            <!-- Dinâmico -->
+        </p>
+        <div class="flex justify-between items-center border-t border-slate-100 pt-4">
+            <button id="btn-tutorial-skip" class="text-xs text-slate-400 hover:text-slate-600 font-semibold transition-colors">
+                Pular Ajuda
+            </button>
+            <div class="flex gap-2">
+                <button id="btn-tut-prev" class="px-3.5 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold transition-all hover:bg-slate-50 flex items-center gap-1">
+                    <i class="fa-solid fa-arrow-left"></i> Voltar
+                </button>
+                <button id="btn-tut-next" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-extrabold transition-all shadow-md flex items-center gap-1">
+                    Avançar <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE AUDITORIA E COMPROVAÇÃO DE FOTO -->
+    <div id="verification-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+            <!-- Cabeçalho do Modal -->
+            <div class="bg-slate-900 text-white p-4 flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-clipboard-check text-emerald-400 text-lg"></i>
+                    <div>
+                        <h3 class="font-bold text-sm">Painel de Auditoria de Pesagem</h3>
+                        <p class="text-[10px] text-slate-400">Verificação de inconsistências físicas vs. declaradas</p>
+                    </div>
+                </div>
+                <button id="btn-verification-close" class="text-slate-400 hover:text-white transition-colors p-1 text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Corpo do Modal -->
+            <div class="p-6 overflow-y-auto space-y-4 text-xs">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Foto Comprovação da Balança -->
+                    <div class="space-y-2">
+                        <label class="block font-bold text-slate-700 text-[11px] uppercase tracking-wide">
+                            <i class="fa-solid fa-image text-emerald-600"></i> Foto de Comprovação Capturada
+                        </label>
+                        <div id="modal-scale-photo-container" class="border border-slate-300 rounded-lg overflow-hidden bg-slate-950 flex items-center justify-center h-48 relative">
+                            <!-- Inserido dinamicamente via JS -->
+                        </div>
+                        <p class="text-[10px] text-slate-500 text-center italic">Foto registrada automaticamente pelo app do motorista Silas.</p>
+                    </div>
+
+                    <!-- Métricas de Auditoria -->
+                    <div class="space-y-4">
+                        <label class="block font-bold text-slate-700 text-[11px] uppercase tracking-wide">
+                            <i class="fa-solid fa-chart-pie text-emerald-600"></i> Relatório de Conciliação
+                        </label>
+
+                        <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2.5">
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500 font-semibold">Ingrediente:</span>
+                                <span id="modal-ing-name" class="font-bold text-slate-800">--</span>
+                            </div>
+                            <div class="flex justify-between items-center border-t border-slate-200 pt-2">
+                                <span class="text-slate-500">Peso Alvo da Dieta:</span>
+                                <span id="modal-ing-target" class="font-mono font-bold text-slate-800">-- kg</span>
+                            </div>
+                            <div class="flex justify-between items-center border-t border-slate-200 pt-2 bg-emerald-50/40 p-1 rounded">
+                                <span class="text-slate-600 font-semibold">Peso Informado (Digitação):</span>
+                                <span id="modal-ing-actual" class="font-mono font-bold text-emerald-800">-- kg</span>
+                            </div>
+                            <div class="flex justify-between items-center border-t border-slate-200 pt-2 bg-amber-50/50 p-1 rounded">
+                                <span class="text-slate-600 font-semibold">Peso na Balança (Foto):</span>
+                                <span id="modal-scale-actual" class="font-mono font-bold text-amber-700">-- kg</span>
+                            </div>
+                        </div>
+
+                        <!-- Caixa de Status de Fraude/Divergência -->
+                        <div id="modal-status-badge" class="p-3 rounded-lg border text-center font-bold">
+                            <!-- Dinâmico -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Painel de Justificativa de campo se houver desvio -->
+                <div class="bg-amber-50/50 border border-amber-200 rounded-lg p-3 space-y-1.5 hidden" id="modal-warning-area">
+                    <h4 class="font-bold text-amber-800 flex items-center gap-1">
+                        <i class="fa-solid fa-triangle-exclamation"></i> Atenção Gestor: Discrepância Detectada!
+                    </h4>
+                    <p class="text-[10px] text-amber-700 leading-relaxed">
+                        O peso extraído via comprovante fotográfico difere do valor registrado no sistema pelo motorista. Isso pode indicar erro de digitação involuntário ou tentativa de fraude de balança física.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Rodapé do Modal -->
+            <div class="bg-slate-50 border-t border-slate-200 p-4 flex justify-between gap-3 flex-wrap sm:flex-nowrap">
+                <button id="btn-modal-reject" class="px-4 py-2.5 border border-red-300 hover:bg-red-50 text-red-700 font-bold rounded-lg transition-colors flex items-center gap-1 text-xs w-full sm:w-auto justify-center">
+                    <i class="fa-solid fa-ban"></i> Rejeitar Carga / Exigir Nova Pesagem
+                </button>
+                <button id="btn-modal-approve" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-all shadow flex items-center gap-1 text-xs w-full sm:w-auto justify-center">
+                    <i class="fa-solid fa-circle-check"></i> Homologar e Aprovar Peso
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE LOTE (PREVENÇÃO DE POP-UPS BLOQUEADOS) -->
+    <div id="confirm-delete-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-sm w-full p-6 text-center space-y-4">
+            <div class="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-xl">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h3 class="font-extrabold text-slate-900 text-base">Confirmar Exclusão</h3>
+            <p class="text-xs text-slate-500 leading-relaxed">Deseja realmente remover este lote de trato e todo o seu histórico de pesagens? Esta ação não pode ser desfeita.</p>
+            <div class="flex gap-3 justify-center pt-2">
+                <button id="btn-cancel-delete" class="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-lg text-xs transition-colors">
+                    Cancelar
+                </button>
+                <button id="btn-confirm-delete" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs transition-all shadow-md">
+                    Excluir Lote
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST DE NOTIFICAÇÃO -->
+    <div id="toast" class="fixed bottom-5 right-5 z-[9999] hidden transform translate-y-2 opacity-0 transition-all duration-300 p-4 bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-2xl flex items-center gap-3 border border-slate-700 max-w-sm">
+        <i class="fa-solid fa-circle-info text-amber-400"></i>
+        <span id="toast-message">Notificação de Sistema</span>
+    </div>
+
+    <!-- INTEGRAÇÃO COMPLETA FIREBASE FIRESTORE E CONTINGÊNCIA -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, addDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 1. CONFIGURAÇÕES GLOBAIS E INICIALIZAÇÃO
+        const firebaseConfig = typeof __firebase_config !== 'undefined'
+            ? JSON.parse(__firebase_config)
+            : {
+                apiKey: "AIzaSyBe-R_7RcO4q34u9jrR4SXoOtfTppQ25FA",
+                authDomain: "integracaocoi.firebaseapp.com",
+                projectId: "integracaocoi",
+                storageBucket: "integracaocoi.firebasestorage.app",
+                messagingSenderId: "177203745489",
+                appId: "1:177203745489:web:62e7ba43f72d7d29032bf0",
+                measurementId: "G-XB493Q9S95"
+            };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' && __app_id ? __app_id : 'integracaocoi';
+        const tratosCollection = collection(db, 'artifacts', appId, 'public', 'data', 'tratos');
+
+        // 2. CONSTANTES E CONFIGURAÇÕES DE TUTORIAL
+        const sampleIngredients = [
+            {
+                id: 1,
+                name: "027 - Brachiaria brizantha, silagem fresca",
+                diet: "TERMINAÇÃO 1 2026",
+                proportion: 33.764500,
+                target: 2815.284010,
+                actual: 2810.000000,
+                deviation: -5.284010,
+                deviationPct: -0.19,
+                scalePhoto: null,
+                scaleActual: null,
+                verificationStatus: 'pending' 
+            },
+            {
+                id: 2,
+                name: "Pré-Mistura",
+                diet: "TERMINAÇÃO 1 2026",
+                proportion: 8.458900,
+                target: 705.303082,
+                actual: 720.500000,
+                deviation: 15.196918,
+                deviationPct: 2.15,
+                scalePhoto: null,
+                scaleActual: null,
+                verificationStatus: 'pending'
+            },
+            {
+                id: 3,
+                name: "Milheto, grão - 005",
+                diet: "TERMINAÇÃO 1 2026",
+                proportion: 30.937600,
+                target: 2579.577088,
+                actual: 2575.000000,
+                deviation: -4.577088,
+                deviationPct: -0.18,
+                scalePhoto: null,
+                scaleActual: null,
+                verificationStatus: 'pending'
+            },
+            {
+                id: 4,
+                name: "DDG OURO - 120794",
+                diet: "TERMINAÇÃO 1 2026",
+                proportion: 26.839000,
+                target: 2237.835820,
+                actual: 2242.000000,
+                deviation: 4.164180,
+                deviationPct: 0.19,
+                scalePhoto: null,
+                scaleActual: null,
+                verificationStatus: 'pending'
+            }
+        ];
+
+        const tutorialSteps = [
+            {
+                elementId: null, 
+                title: "🐂 Bem-vindo ao FarmTell Beef!",
+                text: `
+                    <p>Olá! Este é o sistema de rastreabilidade, controle de tratos e auditorias de balança da ATTO Sementes.</p>
+                    <p class="font-semibold text-slate-900 mt-2">Como funciona o fluxo?</p>
+                    <ul class="list-disc pl-4 space-y-1 mt-1">
+                        <li><strong>1º Passo:</strong> O nutricionista importa a receita tirando uma foto dela.</li>
+                        <li><strong>2º Passo:</strong> As metas do trato diário são salvas na nuvem.</li>
+                        <li><strong>3º Passo:</strong> O operador Silas as recebe direto no trator e faz o carregamento.</li>
+                        <li><strong>4º Passo:</strong> Silas bate foto da balança para comprovar que o peso digitado é exato!</li>
+                    </ul>
+                `,
+                badge: "Boas-vindas"
+            },
+            {
+                elementId: "step-lotes",
+                title: "💾 Gerenciador de Lotes Diários",
+                text: `
+                    <p>Nesta seção você administra as listas de trato.</p>
+                    <p class="mt-2"><strong>O que você pode fazer:</strong></p>
+                    <ul class="list-disc pl-4 space-y-1">
+                        <li>Criar novos lotes para dietas diferentes.</li>
+                        <li>Selecionar lotes antigos no seletor histórico.</li>
+                        <li>Renomear títulos para identificação imediata.</li>
+                    </ul>
+                    <p class="text-xs bg-slate-50 p-2 rounded border mt-2">💡 <em>Nota: Qualquer mudança aqui salva tudo na nuvem Firestore imediatamente.</em></p>
+                `,
+                badge: "Passo 1 de 7"
+            },
+            {
+                elementId: "step-importar",
+                title: "📸 Importar Receita (OCR Inteligente)",
+                text: `
+                    <p>Não há necessidade de digitar os ingredientes um por um!</p>
+                    <p class="mt-2"><strong>Como usar:</strong></p>
+                    <ol class="list-decimal pl-4 space-y-1">
+                        <li>Tire um print ou copie uma imagem de receita no seu computador.</li>
+                        <li>Clique em qualquer parte da tela e pressione <strong>Ctrl+V</strong> para colá-la diretamente.</li>
+                        <li>Você também pode arrastar o arquivo para dentro da caixa tracejada.</li>
+                    </ol>
+                    <p class="text-xs text-amber-700 bg-amber-50 p-2 rounded border mt-2">💡 <em>Nota de Atalho: Se quiser testar o sistema agora, clique em "Aplicar Amostra" para simular a foto de referência <strong>image_535e23.png</strong>.</em></p>
+                `,
+                badge: "Passo 2 de 7"
+            },
+            {
+                elementId: "step-formulacao",
+                title: "⚖️ Formulação Ativa e Tolerâncias",
+                text: `
+                    <p>Essa é a mesa de controle dos ingredientes do lote ativo.</p>
+                    <ul class="list-disc pl-4 space-y-1 mt-2">
+                        <li><strong>Alvo (kg):</strong> A meta nutricional estipulada.</li>
+                        <li><strong>Realizado (kg):</strong> O peso que foi de fato inserido no vagão.</li>
+                        <li><strong>Tolerância de Desvio (%):</strong> Ajuste a tolerância aceitável. Se o desvio do tratorista passar desse percentual, o sistema alertará destacando a linha em vermelho.</li>
+                    </ul>
+                `,
+                badge: "Passo 3 de 7"
+            },
+            {
+                elementId: "btn-transmit",
+                title: "🚜 Transpassando Dados para o Campo",
+                text: `
+                    <p>Ao terminar de planejar, clique no botão <strong>"Enviar Trato para o Motorista"</strong>.</p>
+                    <p class="mt-2">Isso mudará o status do lote para 'Em Trato' e fará com que o monitor digital do tratorista Silas, localizado a quilômetros de distância no campo, atualize as metas de carregamento instantaneamente!</p>
+                `,
+                badge: "Passo 4 de 7"
+            },
+            {
+                elementId: "step-vagao",
+                title: "📟 Tablet do Vagão (Simulação de Silas)",
+                text: `
+                    <p>Esse painel escuro simula a tela instalada no trator do Silas.</p>
+                    <p class="mt-2"><strong>Como testar o fluxo completo:</strong></p>
+                    <ol class="list-decimal pl-4 space-y-1">
+                        <li>Envie o trato (etapa anterior).</li>
+                        <li>Clique em <strong>"Iniciar Pesagem Manual"</strong> no monitor.</li>
+                        <li>Quando a balança digital de pesagem carregar, clique no botão <strong>"Bater Foto Balança"</strong>.</li>
+                        <li>Isso simula Silas batendo a foto obrigatória do mostrador físico para comprovar que o peso digitado não foi burlado.</li>
+                    </ol>
+                `,
+                badge: "Passo 5 de 7"
+            },
+            {
+                elementId: "table-body",
+                title: "🔍 Auditoria & Painel Antifraude",
+                text: `
+                    <p>De volta ao escritório, o nutricionista audita o carregamento!</p>
+                    <p class="mt-2">Ao lado de cada ingrediente preenchido pelo Silas, aparecerá um botão de <strong>Comprovação</strong>. Clique nele para abrir a foto da balança física ao lado do valor digitado.</p>
+                    <p class="text-rose-700 bg-rose-50 p-2 rounded border text-xs mt-2 font-semibold">⚠️ O sistema acusa discrepância automaticamente se houver divergência de pesos!</p>
+                `,
+                badge: "Passo 6 de 7"
+            },
+            {
+                elementId: "step-preview",
+                title: "🎫 Ticket de Carga em Tempo Real",
+                text: `
+                    <p>Aqui você vê o Ticket final de Rastreabilidade.</p>
+                    <p class="mt-2">Ele renderiza dinamicamente as pesagens, os carimbos de auditoria e anexa as fotos reais de comprovação no rodapé do documento. Clique em <strong>"Baixar Relatório com Fotos"</strong> ao concluir para salvar uma cópia física oficial.</p>
+                `,
+                badge: "Passo 7 de 7"
+            }
+        ];
+
+        // 3. ESTADOS DA APLICAÇÃO
+        let user = null;
+        let userId = null;
+        let activeTratoDocId = null;
+        let tratosList = [];
+        let isLocalFallback = false;
+        let ingredients = [];
+        let uploadFileName = "";
+        let simulationInterval = null;
+        let activeAuditIndex = null;
+        let activeWagonIndex = null;
+        let currentDisplayIndex = -1;
+        let currentTutorialStep = 0;
+
+        // 4. MAPAS DE ELEMENTOS DO DOM
+        const tableBody = document.getElementById("table-body");
+        const totalTargetEl = document.getElementById("total-target");
+        const totalActualEl = document.getElementById("total-actual");
+        const totalDeviationEl = document.getElementById("total-deviation");
+        const totalPhotosEl = document.getElementById("total-photos");
+        const toleranceInput = document.getElementById("tolerance");
+        
+        const previewCanvas = document.getElementById("preview-canvas");
+        const btnLoadSample = document.getElementById("btn-load-sample");
+        const btnAddRow = document.getElementById("btn-add-row");
+        const btnTransmit = document.getElementById("btn-transmit");
+        const btnDownloadPdf = document.getElementById("btn-download-pdf");
+        const btnRefreshCanvas = document.getElementById("btn-refresh-canvas");
+        const btnSimLoad = document.getElementById("btn-sim-load");
+
+        const btnSnapScale = document.getElementById("btn-snap-scale");
+        const scalePhotoUpload = document.getElementById("scale-photo-upload");
+        const chkSimulateFraud = document.getElementById("chk-simulate-fraud");
+
+        const imageUploadInput = document.getElementById("image-upload");
+        const dropZone = document.getElementById("drop-zone");
+
+        const wagonDisplay = document.getElementById("wagon-display");
+        const wagonStatus = document.getElementById("wagon-status");
+        const wagonActiveIndicator = document.getElementById("wagon-active-indicator");
+        const wagonTargetName = document.getElementById("wagon-target-name");
+        const wagonTargetWt = document.getElementById("wagon-target-wt");
+        const wagonCurrentWt = document.getElementById("wagon-current-wt");
+        const wagonProgress = document.getElementById("wagon-progress");
+
+        const verificationModal = document.getElementById("verification-modal");
+        const modalScalePhotoContainer = document.getElementById("modal-scale-photo-container");
+        const modalIngName = document.getElementById("modal-ing-name");
+        const modalIngTarget = document.getElementById("modal-ing-target");
+        const modalIngActual = document.getElementById("modal-ing-actual");
+        const modalScaleActual = document.getElementById("modal-scale-actual");
+        const modalStatusBadge = document.getElementById("modal-status-badge");
+        const modalWarningArea = document.getElementById("modal-warning-area");
+        const btnModalReject = document.getElementById("btn-modal-reject");
+        const btnModalApprove = document.getElementById("btn-modal-approve");
+
+        const confirmDeleteModal = document.getElementById("confirm-delete-modal");
+        const btnCancelDelete = document.getElementById("btn-cancel-delete");
+        const btnConfirmDelete = document.getElementById("btn-confirm-delete");
+
+        const tratosSelector = document.getElementById("tratos-selector");
+        const tratoTitleInput = document.getElementById("trato-title-input");
+        const btnDeleteTrato = document.getElementById("btn-delete-trato");
+        const syncIndicator = document.getElementById("sync-indicator");
+        const syncText = document.getElementById("sync-text");
+
+        // 5. FUNÇÕES UTILIÁRIAS E OPERACIONAIS
+        function getStatusText(status) {
+            switch(status) {
+                case 'planejado': return 'Planejado';
+                case 'execucao': return 'Em Trato';
+                case 'concluido': return 'Concluído';
+                case 'aprovado': return 'Auditado';
+                default: return 'Ativo';
+            }
+        }
+
+        function loadImg(src) {
+            return new Promise((resolve) => {
+                if (!src) {
+                    resolve(null);
+                    return;
+                }
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => resolve(null);
+                img.src = src;
+            });
+        }
+
+        // DEFINIÇÃO DA FUNÇÃO DE NOTIFICAÇÃO (CORRIGIDA)
+        function showNotification(message, type = "info") {
+            const toast = document.getElementById("toast");
+            const toastMsg = document.getElementById("toast-message");
+            if (!toast || !toastMsg) return;
+
+            toastMsg.textContent = message;
+            
+            let iconClass = "fa-solid fa-circle-info text-sky-400";
+            if (type === "success") {
+                iconClass = "fa-solid fa-circle-check text-emerald-400";
+            } else if (type === "error") {
+                iconClass = "fa-solid fa-circle-exclamation text-rose-400";
+            } else if (type === "info") {
+                iconClass = "fa-solid fa-circle-info text-amber-400";
+            }
+            
+            const iconEl = toast.querySelector("i");
+            if (iconEl) {
+                iconEl.className = iconClass;
+            }
+
+            toast.classList.remove("hidden", "opacity-0", "translate-y-2");
+            toast.classList.add("flex", "opacity-100", "translate-y-0");
+
+            if (window.toastTimeout) clearTimeout(window.toastTimeout);
+            window.toastTimeout = setTimeout(() => {
+                toast.classList.remove("opacity-100", "translate-y-0");
+                toast.classList.add("opacity-0", "translate-y-2");
+                setTimeout(() => {
+                    toast.classList.add("hidden");
+                    toast.classList.remove("flex");
+                }, 300);
+            }, 4000);
+        }
+
+        // DEFINIÇÃO DO INICIALIZADOR DE AUTENTICAÇÃO (CORRIGIDA)
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    try {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } catch (e) {
+                        console.warn("Token customizado do preview falhou. Alternando para o login anônimo...");
+                        await signInAnonymously(auth);
+                    }
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.warn("Aviso de conexão Firebase: Login anônimo indisponível ou desativado. Ativando Modo Local Offline.", err.message);
+                activateLocalFallbackMode(err.message);
+            }
+        };
+
+        async function drawCanvas() {
+            const ctx = previewCanvas.getContext("2d");
+            if (!ctx) return;
+
+            const itemsWithPhotos = ingredients.filter(item => item.scalePhoto);
+
+            let calculatedHeight = 175 + (ingredients.length * 32) + 60; 
+            if (itemsWithPhotos.length > 0) {
+                const rows = Math.ceil(itemsWithPhotos.length / 2);
+                calculatedHeight += 60 + (rows * 145); 
+            }
+            calculatedHeight += 110; 
+
+            previewCanvas.height = calculatedHeight;
+
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+
+            // Cabeçalho Corporativo
+            ctx.fillStyle = "#064e3b"; 
+            ctx.fillRect(0, 0, previewCanvas.width, 95);
+
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 16px Inter, sans-serif";
+            ctx.fillText("ATTO SEMENTES", 20, 35);
+
+            ctx.fillStyle = "#4ade80"; 
+            ctx.font = "900 11px Inter, sans-serif";
+            ctx.fillText("FARMTELL BEEF - AUDITORIA DE BALANÇA FOTOGRÁFICA", 20, 52);
+
+            ctx.fillStyle = "#a7f3d0"; 
+            ctx.font = "500 11px Courier New, monospace";
+            ctx.fillText("LOTE: " + (tratoTitleInput.value || "Lote de Trato"), 20, 78);
+            ctx.fillText("GERADO EM: " + new Date().toLocaleDateString('pt-BR'), 280, 78);
+
+            ctx.fillStyle = "#10b981"; 
+            ctx.fillRect(0, 95, previewCanvas.width, 4);
+
+            ctx.fillStyle = "#1e293b"; 
+            ctx.font = "bold 13px Inter, sans-serif";
+            ctx.fillText("CONCILIAÇÃO FÍSICA E FOTOGRÁFICA DE CARGA", 20, 125);
+
+            ctx.strokeStyle = "#cbd5e1"; 
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(20, 135);
+            ctx.lineTo(460, 135);
+            ctx.stroke();
+
+            if (ingredients.length === 0) {
+                ctx.fillStyle = "#94a3b8";
+                ctx.font = "italic 13px Inter, sans-serif";
+                ctx.fillText("Aguardando carregamento da receita para gerar o ticket...", 50, calculatedHeight / 2);
+                return;
+            }
+
+            // Headers da tabela interna do Canvas
+            ctx.fillStyle = "#64748b"; 
+            ctx.font = "bold 10px Inter, sans-serif";
+            ctx.fillText("INGREDIENTE", 20, 155);
+            ctx.fillText("ALVO (KG)", 210, 155);
+            ctx.fillText("REAL (KG)", 280, 155);
+            ctx.fillText("AUDITORIA", 370, 155);
+
+            let yPosition = 175;
+            let totalAlvo = 0;
+            let totalReal = 0;
+            let totalApprovedPhotos = 0;
+            const tol = parseFloat(toleranceInput.value) || 5;
+
+            ingredients.forEach((item) => {
+                totalAlvo += item.target;
+                totalReal += item.actual;
+
+                const outOfLimits = Math.abs(item.deviationPct) > tol;
+                if (outOfLimits) {
+                    ctx.fillStyle = "#fef2f2"; 
+                    ctx.fillRect(15, yPosition - 13, 450, 20);
+                }
+
+                ctx.fillStyle = "#334155"; 
+                ctx.font = "bold 11px Inter, sans-serif";
+                let displayName = item.name;
+                if (displayName.length > 25) {
+                    displayName = displayName.substring(0, 22) + "...";
+                }
+                ctx.fillText(displayName, 20, yPosition);
+
+                ctx.fillStyle = "#0f172a"; 
+                ctx.font = "mono 11px Courier New, monospace";
+                ctx.fillText(item.target.toFixed(0).padStart(6, " "), 210, yPosition);
+                ctx.fillText(item.actual.toFixed(0).padStart(6, " "), 280, yPosition);
+
+                ctx.font = "bold 10px Inter, sans-serif";
+                if (item.verificationStatus === 'approved') {
+                    ctx.fillStyle = "#059669";
+                    ctx.fillText("✓ Aprovado", 370, yPosition);
+                    totalApprovedPhotos++;
+                } else if (item.verificationStatus === 'discrepancy') {
+                    ctx.fillStyle = "#d97706";
+                    ctx.fillText("⚠ Divergente", 370, yPosition);
+                } else if (item.verificationStatus === 'rejected') {
+                    ctx.fillStyle = "#dc2626";
+                    ctx.fillText("☒ Rejeitado", 370, yPosition);
+                } else {
+                    ctx.fillStyle = "#64748b";
+                    ctx.fillText("... Pendente", 370, yPosition);
+                }
+
+                ctx.fillStyle = "#e2e8f0";
+                ctx.fillRect(20, yPosition + 4, 160, 3);
+                const percentLoaded = Math.min((item.actual / (item.target || 1)) * 100, 200) / 100;
+                ctx.fillStyle = outOfLimits ? "#ef4444" : "#10b981";
+                ctx.fillRect(20, yPosition + 4, 160 * percentLoaded, 3);
+
+                yPosition += 32;
+            });
+
+            // Divisor de somas
+            ctx.strokeStyle = "#475569"; 
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(20, yPosition - 10);
+            ctx.lineTo(460, yPosition - 10);
+            ctx.stroke();
+
+            // Totais
+            ctx.fillStyle = "#1e293b"; 
+            ctx.font = "bold 11px Inter, sans-serif";
+            ctx.fillText("SOMA TOTAL DO TRATO:", 20, yPosition + 10);
+
+            ctx.font = "bold 12px Courier New, monospace";
+            ctx.fillText(totalAlvo.toFixed(0) + " kg", 210, yPosition + 10);
+            ctx.fillText(totalReal.toFixed(0) + " kg", 280, yPosition + 10);
+
+            yPosition += 25;
+
+            // ANEXO FOTOGRÁFICO DE COMPROVAÇÃO DA BALANÇA INDUSTRIAL
+            if (itemsWithPhotos.length > 0) {
+                ctx.fillStyle = "#0f172a";
+                ctx.font = "bold 11px Inter, sans-serif";
+                ctx.fillText("ANEXO FOTOGRÁFICO DE COMPROVAÇÃO (BALANÇA FÍSICA)", 20, yPosition + 15);
+                
+                ctx.strokeStyle = "#cbd5e1";
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(20, yPosition + 22);
+                ctx.lineTo(460, yPosition + 22);
+                ctx.stroke();
+                
+                let gridY = yPosition + 35;
+                for (let i = 0; i < itemsWithPhotos.length; i++) {
+                    const item = itemsWithPhotos[i];
+                    const col = i % 2;
+                    const x = col === 0 ? 20 : 250;
+                    
+                    // Desenha caixa de fundo para a imagem
+                    ctx.fillStyle = "#f8fafc";
+                    ctx.fillRect(x, gridY, 210, 130);
+                    ctx.strokeStyle = "#e2e8f0";
+                    ctx.strokeRect(x, gridY, 210, 130);
+                    
+                    // Carrega e desenha a foto capturada da balança
+                    const img = await loadImg(item.scalePhoto);
+                    if (img) {
+                        ctx.drawImage(img, x + 5, gridY + 5, 200, 95);
+                    } else {
+                        ctx.fillStyle = "#94a3b8";
+                        ctx.font = "italic 9px Inter, sans-serif";
+                        ctx.fillText("Erro ao carregar imagem", x + 10, gridY + 50);
+                    }
+                    
+                    // Descrição do ingrediente na foto anexa
+                    ctx.fillStyle = "#334155";
+                    ctx.font = "bold 8px Inter, sans-serif";
+                    let shortName = item.name;
+                    if (shortName.length > 28) shortName = shortName.substring(0, 25) + "...";
+                    ctx.fillText(shortName, x + 5, gridY + 112);
+                    
+                    // Peso balança vs digitado impresso na foto
+                    ctx.fillStyle = item.verificationStatus === 'discrepancy' ? "#b45309" : "#047857";
+                    ctx.font = "bold 9px Inter, sans-serif";
+                    ctx.fillText(`Bal: ${item.scaleActual.toFixed(0)} kg | Dig: ${item.actual.toFixed(0)} kg`, x + 5, gridY + 122);
+                    
+                    if (col === 1 || i === itemsWithPhotos.length - 1) {
+                        gridY += 138;
+                    }
+                }
+                yPosition = gridY;
+            }
+
+            // Carimbo de homologação posicionado logo abaixo das fotos ou da tabela
+            const stampY = yPosition + 15;
+            const allApproved = totalApprovedPhotos === ingredients.length;
+            ctx.strokeStyle = allApproved ? "#10b981" : "#ef4444";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(280, stampY, 175, 55);
+
+            ctx.fillStyle = allApproved ? "#10b981" : "#ef4444";
+            ctx.font = "900 11px Inter, sans-serif";
+            ctx.fillText(allApproved ? "AUDITADO & COMPROVADO" : "PENDENTE DE FOTOS", 290, stampY + 22);
+            
+            ctx.font = "900 9px Inter, sans-serif";
+            ctx.fillStyle = "#64748b";
+            ctx.fillText(`Auditoria: ${totalApprovedPhotos}/${ingredients.length} Fotos OK`, 290, stampY + 36);
+            ctx.font = "italic 8px Inter, sans-serif";
+            ctx.fillText("Rastreabilidade FarmTell", 290, stampY + 48);
+
+            // Código de barras técnico
+            const barcodeY = yPosition + 30;
+            ctx.fillStyle = "#0f172a";
+            for (let i = 20; i < 220; i += 4) {
+                const width = Math.random() > 0.4 ? 2.5 : 1;
+                ctx.fillRect(i, barcodeY, width, 25);
+            }
+            ctx.font = "8px Courier New, monospace";
+            ctx.fillStyle = "#64748b";
+            ctx.fillText("*FTB-CLOUD-SECURE-SYSTEM-2026*", 20, barcodeY + 35);
+
+            // Rodapé estático do Canvas
+            ctx.fillStyle = "#f8fafc";
+            ctx.fillRect(0, previewCanvas.height - 25, previewCanvas.width, 25);
+            ctx.fillStyle = "#94a3b8";
+            ctx.font = "8px Inter, sans-serif";
+            ctx.fillText("EM CONFORMIDADE COM PROTOCOLO DE DUPLA ENTRADA DE DADOS E BALANÇA", 60, previewCanvas.height - 10);
+        }
+
+        function calculateTotals() {
+            if (ingredients.length === 0) {
+                totalTargetEl.textContent = "0,00 kg";
+                totalActualEl.textContent = "0,00 kg";
+                totalDeviationEl.textContent = "0,00 kg";
+                totalPhotosEl.textContent = "Fotos: 0/0";
+                return;
+            }
+
+            let sumTarget = 0;
+            let sumActual = 0;
+            let sumPhotos = 0;
+
+            ingredients.forEach(item => {
+                sumTarget += item.target;
+                sumActual += item.actual;
+                if (item.scalePhoto) sumPhotos++;
+            });
+
+            const sumDeviation = sumActual - sumTarget;
+            const sumDevPct = sumTarget > 0 ? (sumDeviation / sumTarget) * 100 : 0;
+
+            totalTargetEl.textContent = sumTarget.toLocaleString('pt-BR', { minimumFractionDigits: 1 }) + " kg";
+            totalActualEl.textContent = sumActual.toLocaleString('pt-BR', { minimumFractionDigits: 1 }) + " kg";
+            totalPhotosEl.textContent = `Fotos: ${sumPhotos}/${ingredients.length}`;
+
+            const sign = sumDeviation >= 0 ? "+" : "";
+            const isOutOfTolerance = Math.abs(sumDevPct) > (parseFloat(toleranceInput.value) || 5);
+            totalDeviationEl.innerHTML = `
+                <div class="flex flex-col items-center">
+                    <span class="font-bold ${isOutOfTolerance ? 'text-red-600' : 'text-emerald-700'}">${sign}${sumDevPct.toFixed(2)}%</span>
+                    <span class="text-[10px] text-slate-500">(${sign}${sumDeviation.toFixed(1)} kg)</span>
+                </div>
+            `;
+        }
+
+        function recalculateRow(index) {
+            const item = ingredients[index];
+            item.deviation = item.actual - item.target;
+            if (item.target > 0) {
+                item.deviationPct = (item.deviation / item.target) * 100;
+            } else {
+                item.deviationPct = 0;
+            }
+        }
+
+        function renderTable() {
+            tableBody.innerHTML = "";
+            
+            if (ingredients.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="p-8 text-center text-slate-400">
+                            <div class="flex flex-col items-center justify-center space-y-2">
+                                <i class="fa-solid fa-wheat-awn-circle-exclamation text-3xl text-slate-300"></i>
+                                <p class="text-sm font-semibold">Nenhum ingrediente configurado no lote ativo</p>
+                                <p class="text-xs">Suba uma imagem de receita ou clique em "Aplicar Amostra" para preenchimento imediato.</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            ingredients.forEach((item, index) => {
+                const tr = document.createElement("tr");
+                const tol = parseFloat(toleranceInput.value) || 5;
+                const isOutOfTolerance = Math.abs(item.deviationPct) > tol;
+                const rowBgClass = isOutOfTolerance ? "bg-red-50/70 hover:bg-red-50" : "hover:bg-slate-50/50";
+                const textDevClass = item.deviationPct > 0 ? "text-red-600 font-bold" : (item.deviationPct < 0 ? "text-amber-600 font-bold" : "text-emerald-600");
+
+                let proofCellHTML = "";
+                if (!item.scalePhoto) {
+                    proofCellHTML = `
+                        <button onclick="openVerificationModal(${index})" class="w-full text-rose-500 hover:text-rose-600 bg-rose-50 hover:bg-rose-100 px-3 py-2 rounded-lg border border-rose-200 flex items-center justify-center gap-1 font-bold shadow-sm transition-colors text-[10px]">
+                            <i class="fa-solid fa-camera animate-pulse text-rose-600"></i> Pendente
+                        </button>
+                    `;
+                } else if (item.verificationStatus === 'discrepancy') {
+                    proofCellHTML = `
+                        <button onclick="openVerificationModal(${index})" class="w-full text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 px-3 py-2 rounded-lg border border-amber-300 flex items-center justify-center gap-1 font-bold shadow-sm transition-colors text-[10px]">
+                            <i class="fa-solid fa-triangle-exclamation text-amber-600 animate-bounce"></i> Divergente!
+                        </button>
+                    `;
+                } else if (item.verificationStatus === 'approved') {
+                    proofCellHTML = `
+                        <div onclick="openVerificationModal(${index})" class="cursor-pointer bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2.5 py-1.5 rounded-lg flex items-center justify-between gap-1 transition-colors">
+                            <span class="text-emerald-700 font-bold flex items-center gap-1 text-[11px]">
+                                <i class="fa-solid fa-circle-check text-emerald-600"></i> Auditado
+                            </span>
+                            <img src="${item.scalePhoto}" class="w-7 h-5 object-cover rounded border border-emerald-200 shadow-sm">
+                        </div>
+                    `;
+                } else if (item.verificationStatus === 'rejected') {
+                    proofCellHTML = `
+                        <button onclick="openVerificationModal(${index})" class="w-full text-red-700 hover:text-red-800 bg-red-100 hover:bg-red-200 px-3 py-2 rounded-lg border border-red-300 flex items-center justify-center gap-1 font-bold shadow-sm transition-colors text-[10px]">
+                            <i class="fa-solid fa-ban"></i> Rejeitado
+                        </button>
+                    `;
+                }
+
+                tr.className = `${rowBgClass} transition-colors`;
+                tr.innerHTML = `
+                    <td class="p-3">
+                        <input type="text" value="${item.name}" class="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-white px-2 py-1.5 rounded-lg transition-all font-semibold text-slate-700" onchange="updateItemField(${index}, 'name', this.value)">
+                    </td>
+                    <td class="p-3">
+                        <input type="number" step="0.01" value="${item.target.toFixed(2)}" class="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-white px-2 py-1.5 rounded-lg text-right transition-all font-bold text-slate-800 font-mono" onchange="updateItemField(${index}, 'target', this.value)">
+                    </td>
+                    <td class="p-3 bg-emerald-50/40">
+                        <input type="number" step="0.01" value="${item.actual.toFixed(2)}" class="w-full bg-white border border-emerald-200 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 px-2.5 py-1.5 rounded-lg text-right font-bold text-slate-800 font-mono shadow-sm" oninput="updateItemActual(${index}, this.value)">
+                    </td>
+                    <td class="p-3 text-center">
+                        <div class="flex flex-col items-center">
+                            <span class="font-bold ${textDevClass} font-mono">${item.deviationPct >= 0 ? '+' : ''}${item.deviationPct.toFixed(2)}%</span>
+                            <span class="text-[10px] text-slate-500 font-mono">(${item.deviation >= 0 ? '+' : ''}${item.deviation.toFixed(1)} kg)</span>
+                        </div>
+                    </td>
+                    <td class="p-3">
+                        ${proofCellHTML}
+                    </td>
+                    <td class="p-3 text-center">
+                        <button onclick="removeItem(${index})" class="text-slate-300 hover:text-red-500 transition-colors p-2" title="Remover item">
+                            <i class="fa-solid fa-trash-can text-sm"></i>
+                        </button>
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        function loadIngredients(data, triggerSave = true) {
+            ingredients = JSON.parse(JSON.stringify(data));
+            renderTable();
+            calculateTotals();
+            drawCanvas();
+            if (triggerSave) {
+                saveActiveTrato();
+            }
+        }
+
+        // 5.1 FUNÇÕES DE MANIPULAÇÃO DE ITENS E MODAIS
+        function updateItemField(index, field, value) {
+            if (field === 'target') {
+                ingredients[index][field] = parseFloat(value) || 0;
+            } else {
+                ingredients[index][field] = value;
+            }
+            recalculateRow(index);
+            calculateTotals();
+            drawCanvas();
+            saveActiveTrato();
+        }
+
+        function updateItemActual(index, value) {
+            ingredients[index].actual = parseFloat(value) || 0;
+            
+            if (ingredients[index].scaleActual !== null) {
+                if (Math.abs(ingredients[index].actual - ingredients[index].scaleActual) > 1.0) {
+                    ingredients[index].verificationStatus = 'discrepancy';
+                } else {
+                    ingredients[index].verificationStatus = 'approved';
+                }
+            }
+            
+            recalculateRow(index);
+            calculateTotals();
+            drawCanvas();
+            saveActiveTrato();
+        }
+
+        function removeItem(index) {
+            ingredients.splice(index, 1);
+            renderTable();
+            calculateTotals();
+            drawCanvas();
+            saveActiveTrato();
+            showNotification("Ingrediente removido do lote", "info");
+        }
+
+        function openVerificationModal(index) {
+            activeAuditIndex = index;
+            const item = ingredients[index];
+            
+            modalIngName.textContent = item.name;
+            modalIngTarget.textContent = `${item.target.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} kg`;
+            modalIngActual.textContent = `${item.actual.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} kg`;
+            
+            if (item.scalePhoto) {
+                modalScaleActual.textContent = `${item.scaleActual.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} kg`;
+                modalScalePhotoContainer.innerHTML = `<img src="${item.scalePhoto}" class="max-w-full max-h-full object-contain">`;
+                
+                const diff = Math.abs(item.actual - item.scaleActual);
+                if (diff > 1.5) { 
+                    modalStatusBadge.className = "p-3 rounded-lg border text-center font-bold bg-amber-50 border-amber-300 text-amber-800";
+                    modalStatusBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation animate-bounce"></i> ALERTA DE DISCREPÂNCIA: Diferença de ${diff.toFixed(1)} kg entre o digitado e o comprovante físico!`;
+                    modalWarningArea.classList.remove("hidden");
+                } else {
+                    modalStatusBadge.className = "p-3 rounded-lg border text-center font-bold bg-emerald-50 border-emerald-300 text-emerald-800";
+                    modalStatusBadge.innerHTML = `<i class="fa-solid fa-circle-check"></i> PESO CONCILIADO: Valores batem rigorosamente.`;
+                    modalWarningArea.classList.add("hidden");
+                }
+            } else {
+                modalScaleActual.textContent = "-- kg";
+                modalScalePhotoContainer.innerHTML = `
+                    <div class="text-center p-4 text-slate-400">
+                        <i class="fa-solid fa-camera-retro text-4xl mb-2 text-slate-600"></i>
+                        <p class="font-bold">Sem foto da balança vinculada</p>
+                        <p class="text-[10px] mt-1">Aguardando o motorista bater a foto no painel do misturador.</p>
+                    </div>
+                `;
+                modalStatusBadge.className = "p-3 rounded-lg border text-center font-bold bg-slate-100 border-slate-300 text-slate-600";
+                modalStatusBadge.innerHTML = `<i class="fa-solid fa-hourglass-half"></i> AGUARDANDO REGISTRO FOTOGRÁFICO`;
+                modalWarningArea.classList.add("hidden");
+            }
+            
+            verificationModal.classList.remove("hidden");
+        }
+
+        function closeVerificationModal() {
+            verificationModal.classList.add("hidden");
+            activeAuditIndex = null;
+        }
+
+        // 6. CONTROLADORES E LOGICA DE TUTORIAL / ONBOARDING
+        function startTutorial(forced = false) {
+            if (!forced) {
+                const tutorialDone = localStorage.getItem("first_access_done");
+                if (tutorialDone) return; 
+            }
+
+            currentTutorialStep = 0;
+            document.getElementById("tutorial-backdrop").classList.remove("hidden");
+            document.getElementById("tutorial-card").classList.remove("hidden");
+            showTutorialStep(0);
+        }
+
+        function showTutorialStep(stepIndex) {
+            const step = tutorialSteps[stepIndex];
+            
+            document.querySelectorAll(".tutorial-highlight").forEach(el => {
+                el.classList.remove("tutorial-highlight");
+            });
+
+            if (step.elementId) {
+                const targetEl = document.getElementById(step.elementId);
+                if (targetEl) {
+                    targetEl.classList.add("tutorial-highlight");
+                    targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+            }
+
+            const progressPercent = ((stepIndex) / (tutorialSteps.length - 1)) * 100;
+            const progressBar = document.getElementById("tutorial-progress-bar");
+            if (progressBar) progressBar.style.width = `${progressPercent}%`;
+
+            document.getElementById("tutorial-badge").innerHTML = `<i class="fa-solid fa-graduation-cap"></i> ${step.badge}`;
+            document.getElementById("tutorial-title").textContent = step.title;
+            document.getElementById("tutorial-text").innerHTML = step.text;
+
+            document.getElementById("btn-tut-prev").disabled = stepIndex === 0;
+            document.getElementById("btn-tut-prev").className = stepIndex === 0 
+                ? "px-3.5 py-2 border border-slate-100 text-slate-300 rounded-lg text-xs font-bold transition-all cursor-not-allowed flex items-center gap-1"
+                : "px-3.5 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold transition-all hover:bg-slate-50 flex items-center gap-1";
+
+            const isLast = stepIndex === tutorialSteps.length - 1;
+            document.getElementById("btn-tut-next").innerHTML = isLast 
+                ? `Concluir e Iniciar <i class="fa-solid fa-check"></i>` 
+                : `Avançar <i class="fa-solid fa-arrow-right"></i>`;
+        }
+
+        function nextTutorialStep() {
+            if (currentTutorialStep < tutorialSteps.length - 1) {
+                currentTutorialStep++;
+                showTutorialStep(currentTutorialStep);
+            } else {
+                endTutorial();
+            }
+        }
+
+        function prevTutorialStep() {
+            if (currentTutorialStep > 0) {
+                currentTutorialStep--;
+                showTutorialStep(currentTutorialStep);
+            }
+        }
+
+        function endTutorial() {
+            document.getElementById("tutorial-backdrop").classList.add("hidden");
+            document.getElementById("tutorial-card").classList.add("hidden");
+            
+            document.querySelectorAll(".tutorial-highlight").forEach(el => {
+                el.classList.remove("tutorial-highlight");
+            });
+
+            localStorage.setItem("first_access_done", "true");
+            showNotification("Manual concluído! O sistema está pronto.", "success");
+        }
+
+        function triggerExplainerStep(stepNum) {
+            currentTutorialStep = stepNum;
+            document.getElementById("tutorial-backdrop").classList.remove("hidden");
+            document.getElementById("tutorial-card").classList.remove("hidden");
+            showTutorialStep(stepNum);
+        }
+
+        // 7. SISTEMA DE FALLBACK LOCAL E ERRO DE CONEXÃO
+        function activateLocalFallbackMode(errMessage) {
+            if (isLocalFallback) return;
+            isLocalFallback = true;
+            userId = "usuario-offline-local";
+            
+            const syncIndicator = document.getElementById("sync-indicator");
+            const syncText = document.getElementById("sync-text");
+
+            document.getElementById("user-id-badge").textContent = `Operador Local (Off-line)`;
+            if (syncIndicator) syncIndicator.className = "h-2 w-2 rounded-full bg-amber-500 animate-pulse";
+            if (syncText) syncText.textContent = "Contingência Local";
+            
+            showNotification("Firebase offline. Utilizando armazenamento temporário local.", "info");
+            
+            // Renderiza o banner explicativo no topo da página
+            showFirebaseSetupWarning(errMessage);
+
+            // Carrega os lotes a partir do localStorage
+            loadLocalTratos();
+        }
+
+        // Gera e insere o banner explicativo de setup do Console do Firebase
+        function showFirebaseSetupWarning(errMessage) {
+            const warningContainer = document.getElementById("firebase-setup-warning");
+            if (!warningContainer) return;
+            warningContainer.innerHTML = `
+                <div class="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-xl shadow-sm text-xs md:text-sm text-amber-800 space-y-2 mb-2">
+                    <div class="flex items-center justify-between">
+                        <span class="font-extrabold flex items-center gap-1.5 text-amber-900 text-sm">
+                            <i class="fa-solid fa-triangle-exclamation text-amber-600 text-lg"></i>
+                            Conexão de Nuvem Sincronizada Pendente
+                        </span>
+                        <button onclick="this.parentElement.parentElement.remove()" class="text-amber-500 hover:text-amber-700 p-1" title="Fechar aviso">
+                            <i class="fa-solid fa-xmark text-sm"></i>
+                        </button>
+                    </div>
+                    <p>O Firebase retornou o seguinte aviso durante a conexão: <code class="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-[11px] text-amber-950 font-bold">${errMessage}</code>.</p>
+                    <p class="font-medium text-[11px] leading-relaxed text-amber-700">
+                        <strong>Como corrigir no seu projeto externo?</strong> Para habilitar a comunicação sincronizada e multiusuário do painel com o tratorista Silas no seu ambiente final, acesse o seu 
+                        <a href="https://console.firebase.google.com" target="_blank" class="underline font-bold text-amber-900 hover:text-amber-950">Console do Firebase</a>, navegue em 
+                        <strong>Build > Authentication > Sign-in method</strong>, clique em <strong>Adicionar provedor</strong>, escolha <strong>Anônimo</strong>, clique em <strong>Ativar</strong> e depois em <strong>Salvar</strong>.
+                    </p>
+                    <p class="font-bold text-[11px] text-emerald-800 bg-emerald-50 px-2.5 py-1.5 rounded inline-block">
+                        ✓ Não se preocupe! O sistema já migrou automaticamente para o Modo Local. Todos os testes de carregamento, pesagem e auditoria estão 100% funcionais!
+                    </p>
+                </div>
+            `;
+        }
+
+        // Carrega dados locais contingenciados
+        function loadLocalTratos() {
+            const localData = localStorage.getItem("farmtell_tratos");
+            if (localData) {
+                tratosList = JSON.parse(localData);
+            } else {
+                tratosList = [{
+                    id: "local-trato-default",
+                    title: "Trato Lote 01 - Matriz (Local)",
+                    timestamp: Date.now(),
+                    tolerance: 5,
+                    ingredients: [],
+                    status: "planejado",
+                    lastUpdatedBy: "usuario-offline-local"
+                }];
+                localStorage.setItem("farmtell_tratos", JSON.stringify(tratosList));
+            }
+            
+            renderTratosSelector();
+            if (!activeTratoDocId && tratosList.length > 0) {
+                selectTrato(tratosList[0].id);
+            }
+        }
+
+        // 8. OCR REAL E INTEGRAÇÃO DE VISÃO DA API GEMINI
+        async function callGeminiVisionAPI(base64Data, mimeType) {
+            const apiKey = ""; // Mantido vazio para o ambiente injetar a chave correspondente
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            
+            const payload = {
+                contents: [
+                    {
+                        role: "user",
+                        parts: [
+                            {
+                                text: "Analise a imagem desta planilha de formulação ou receita de trato para confinamento de gado e extraia os ingredientes em formato JSON estruturado. Retorne um objeto com uma lista de 'ingredients'. Cada ingrediente deve conter: 'name' (string, o nome do ingrediente conforme escrito na planilha de forma amigável), 'target' (number, o carregamento do ingrediente ou peso alvo em kg, garantindo que seja um número), 'diet' (string, dieta se identificada na imagem ou use 'TERMINAÇÃO' como padrão), 'proportion' (number, proporção em % se identificada na imagem)."
+                            },
+                            {
+                                inlineData: {
+                                    mimeType: mimeType,
+                                    data: base64Data
+                                }
+                            }
+                        ]
+                    }
+                ],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            ingredients: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        name: { type: "STRING" },
+                                        target: { type: "NUMBER" },
+                                        diet: { type: "STRING" },
+                                        proportion: { type: "NUMBER" }
+                                    },
+                                    required: ["name", "target"]
+                                }
+                            }
+                        },
+                        required: ["ingredients"]
+                    }
+                }
+            };
+
+            const fetchWithRetry = async (retries = 0) => {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    if (retries < 5) {
+                        const delay = Math.pow(2, retries) * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        return fetchWithRetry(retries + 1);
+                    } else {
+                        throw error;
+                    }
+                }
+            };
+
+            return fetchWithRetry();
+        }
+
+        function processAndScanImageFile(file) {
+            const reader = new FileReader();
+            reader.onload = async function(evt) {
+                const base64WithPrefix = evt.target.result;
+                const parts = base64WithPrefix.split(',');
+                const mimeType = parts[0].match(/:(.*?);/)[1];
+                const base64Data = parts[1];
+
+                showNotification("Enviando imagem para análise de IA FarmTell Beef...", "info");
+                const dropZoneContent = dropZone.querySelector("div");
+                const originalHTML = dropZoneContent.innerHTML;
+                
+                dropZoneContent.innerHTML = `
+                    <div class="flex flex-col items-center justify-center space-y-2 text-emerald-700 font-semibold animate-pulse">
+                        <i class="fa-solid fa-microchip text-3xl text-emerald-600 animate-spin"></i>
+                        <p>IA FarmTell processando imagem via Gemini API...</p>
+                        <div class="w-48 bg-emerald-200 rounded-full h-1.5 overflow-hidden relative">
+                            <div class="bg-emerald-600 h-1.5 rounded-full absolute top-0 left-0 w-1/2 animate-infinite-scroll"></div>
+                        </div>
+                    </div>
+                `;
+
+                try {
+                    const result = await callGeminiVisionAPI(base64Data, mimeType);
+                    const textResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (!textResponse) {
+                        throw new Error("Nenhum dado retornado da análise visual do Gemini.");
+                    }
+
+                    const parsed = JSON.parse(textResponse);
+                    if (parsed && parsed.ingredients && parsed.ingredients.length > 0) {
+                        const mappedIngredients = parsed.ingredients.map((item, index) => {
+                            const targetVal = parseFloat(item.target) || 0;
+                            return {
+                                id: Date.now() + index,
+                                name: item.name || `Ingrediente ${index + 1}`,
+                                diet: item.diet || tratoTitleInput.value || "TERMINAÇÃO",
+                                proportion: parseFloat(item.proportion) || 0,
+                                target: targetVal,
+                                actual: 0.00,
+                                deviation: -targetVal,
+                                deviationPct: -100.00,
+                                scalePhoto: null,
+                                scaleActual: null,
+                                verificationStatus: 'pending'
+                            };
+                        });
+
+                        loadIngredients(mappedIngredients, true);
+                        showNotification(`Sucesso! ${mappedIngredients.length} ingredientes extraídos da sua imagem.`, "success");
+                    } else {
+                        throw new Error("Nenhum ingrediente estruturado pôde ser identificado.");
+                    }
+                } catch (error) {
+                    console.warn("Falha no processamento real de OCR por inteligência artificial:", error);
+                    showNotification("Falha na leitura por IA. Certifique-se de que a planilha possui metas e nomes visíveis.", "error");
+                } finally {
+                    dropZoneContent.innerHTML = originalHTML;
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // ------------------ SISTEMA DE INTERFACES E TERMINAIS DE CAMPO ------------------
+        
+        async function updateLoteStatusNuvem(newStatus) {
+            if (!activeTratoDocId) return;
+
+            if (isLocalFallback) {
+                const index = tratosList.findIndex(t => t.id === activeTratoDocId);
+                if (index !== -1) {
+                    tratosList[index].status = newStatus;
+                    localStorage.setItem("farmtell_tratos", JSON.stringify(tratosList));
+                    updateWagonSimulationInterface(tratosList[index]);
+                    drawCanvas();
+                }
+                return;
+            }
+
+            if (!appId || !activeTratoDocId) return;
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'tratos', activeTratoDocId);
+            try {
+                await updateDoc(docRef, { status: newStatus });
+            } catch(err) {
+                console.error("Erro ao atualizar status:", err);
+            }
+        }
+
+        function setWagonCurrentTargetItem(index) {
+            if (index >= ingredients.length) {
+                updateLoteStatusNuvem("concluido");
+                currentDisplayIndex = -1;
+                activeWagonIndex = null;
+                return;
+            }
+
+            activeWagonIndex = index;
+            if (currentDisplayIndex !== index) {
+                currentDisplayIndex = index;
+                const item = ingredients[index];
+                wagonTargetName.textContent = item.name.length > 22 ? item.name.substring(0, 19) + "..." : item.name;
+                wagonTargetWt.textContent = `${item.target.toFixed(0)} kg`;
+                wagonCurrentWt.textContent = `0 kg`;
+                wagonProgress.style.width = `0%`;
+                btnSimLoad.disabled = false;
+            }
+            renderWagonDisplayList();
+        }
+
+        // RENDERIZA A TELEMETRIA EM TEMPO REAL NO PAINEL DO SILAS (CAMPO)
+        function renderWagonDisplayList() {
+            if (ingredients.length === 0) {
+                wagonDisplay.innerHTML = `<p class="text-slate-500 italic text-center py-4">Sem ingredientes cadastrados neste lote.</p>`;
+                return;
+            }
+            
+            let listHTML = `<div class="space-y-1.5 text-[11px] font-sans">`;
+            ingredients.forEach((item, idx) => {
+                let statusIcon = '<i class="fa-regular fa-circle text-slate-600"></i>';
+                let textClass = "text-slate-400";
+                
+                if (item.scalePhoto) {
+                    statusIcon = '<i class="fa-solid fa-circle-check text-green-500"></i>';
+                    textClass = "text-emerald-500 font-semibold";
+                } else if (idx === activeWagonIndex) {
+                    statusIcon = '<i class="fa-solid fa-spinner animate-spin text-amber-500"></i>';
+                    textClass = "text-amber-400 font-extrabold animate-pulse";
+                }
+                
+                listHTML += `
+                    <div class="flex justify-between items-center py-1 border-b border-slate-800/40 ${textClass}">
+                        <span class="flex items-center gap-2">
+                            ${statusIcon}
+                            <span>${item.name}</span>
+                        </span>
+                        <span class="font-mono text-[10px]">
+                            ${item.scaleActual ? item.scaleActual.toFixed(0) : '0'} / <strong>${item.target.toFixed(0)} kg</strong>
+                        </span>
+                    </div>
+                `;
+            });
+            listHTML += `</div>`;
+            wagonDisplay.innerHTML = listHTML;
+        }
+
+        function updateWagonSimulationInterface(tratoDoc) {
+            if (tratoDoc.status === 'execucao') {
+                wagonStatus.textContent = "EM EXECUÇÃO";
+                wagonStatus.className = "bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-[10px] px-2 py-0.5 rounded-full font-bold";
+                btnSimLoad.disabled = false;
+                wagonActiveIndicator.classList.remove("hidden");
+                
+                if (activeWagonIndex === null || activeWagonIndex >= tratoDoc.ingredients.length) {
+                    let nextToLoadIdx = tratoDoc.ingredients.findIndex(i => !i.scalePhoto);
+                    if (nextToLoadIdx === -1) nextToLoadIdx = 0;
+                    activeWagonIndex = nextToLoadIdx;
+                }
+                setWagonCurrentTargetItem(activeWagonIndex);
+            } else if (tratoDoc.status === 'concluido') {
+                wagonStatus.textContent = "AGUARD. AUDITORIA";
+                wagonStatus.className = "bg-amber-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse";
+                wagonActiveIndicator.classList.add("hidden");
+                btnSimLoad.disabled = true;
+                
+                wagonDisplay.innerHTML = `
+                    <div class="text-center py-4">
+                        <p class="text-yellow-400 font-bold"><i class="fa-solid fa-square-poll-vertical mr-1.5"></i> CARREGAMENTO CONCLUÍDO</p>
+                        <p class="text-[10px] text-slate-300 mt-1">Todas as fotos da balança já foram enviadas. Aguardando homologação do gestor.</p>
+                    </div>
+                `;
+            } else if (tratoDoc.status === 'aprovado') {
+                wagonStatus.textContent = "AUDITADO";
+                wagonStatus.className = "bg-green-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold";
+                wagonActiveIndicator.classList.add("hidden");
+                btnSimLoad.disabled = true;
+                
+                wagonDisplay.innerHTML = `
+                    <div class="text-center py-4">
+                        <p class="text-green-400 font-bold"><i class="fa-solid fa-circle-check mr-1.5"></i> AUDITORIA CONCLUÍDA</p>
+                        <p class="text-[10px] text-slate-300 mt-1">Este lote de trato diário foi 100% homologado e auditado sem inconformidades.</p>
+                    </div>
+                `;
+            } else {
+                wagonStatus.textContent = "Aguardando Trato";
+                wagonStatus.className = "bg-slate-700 text-slate-400 text-[10px] px-2 py-0.5 rounded-full font-bold";
+                wagonActiveIndicator.classList.add("hidden");
+                btnSimLoad.disabled = true;
+                
+                wagonDisplay.innerHTML = `
+                    <p class="text-slate-400 italic text-center py-4">Aguardando recebimento de metas de pesagem do escritório administrativo.</p>
+                `;
+            }
+        }
+
+        function generateScalePhoto(weightValue) {
+            const tempCanvas = document.createElement("canvas");
+            tempCanvas.width = 320;
+            tempCanvas.height = 240;
+            const tCtx = tempCanvas.getContext("2d");
+            
+            tCtx.fillStyle = "#1e293b"; 
+            tCtx.fillRect(0, 0, 320, 240);
+            
+            tCtx.strokeStyle = "#475569";
+            tCtx.lineWidth = 10;
+            tCtx.strokeRect(5, 5, 310, 230);
+            
+            tCtx.fillStyle = "#ffffff";
+            tCtx.font = "bold 11px Inter, sans-serif";
+            tCtx.fillText("TOLEDO BRASIL", 20, 30);
+            
+            tCtx.fillStyle = "#94a3b8";
+            tCtx.font = "8px monospace";
+            tCtx.fillText("MOD: INTEGRATOR-X 9091", 20, 42);
+
+            tCtx.fillStyle = "#22c55e"; 
+            tCtx.beginPath(); tCtx.arc(220, 32, 6, 0, Math.PI * 2); tCtx.fill();
+            tCtx.fillStyle = "#10b981";
+            tCtx.font = "bold 8px sans-serif";
+            tCtx.fillText("ESTÁVEL", 232, 35);
+
+            tCtx.fillStyle = "#ef4444"; 
+            tCtx.beginPath(); tCtx.arc(160, 32, 6, 0, Math.PI * 2); tCtx.fill();
+            tCtx.fillStyle = "#ef4444";
+            tCtx.fillText("ZERO", 172, 35);
+            
+            tCtx.fillStyle = "#020617";
+            tCtx.fillRect(20, 60, 280, 100);
+            
+            tCtx.shadowColor = "#ef4444";
+            tCtx.shadowBlur = 12;
+            tCtx.fillStyle = "#ef4444";
+            tCtx.font = "900 42px monospace";
+            tCtx.textBaseline = "middle";
+            tCtx.textAlign = "right";
+            
+            const displayStr = Math.round(weightValue).toLocaleString('pt-BR');
+            tCtx.fillText(displayStr, 245, 110);
+            
+            tCtx.shadowBlur = 0; 
+            tCtx.fillStyle = "#fca5a5";
+            tCtx.font = "bold 20px Inter, sans-serif";
+            tCtx.fillText("kg", 255, 110);
+            tCtx.textAlign = "left";
+
+            tCtx.fillStyle = "rgba(255,255,255,0.06)";
+            for(let i = 0; i < 240; i += 4) {
+                tCtx.fillRect(0, i, 320, 1.5);
+            }
+
+            tCtx.fillStyle = "#64748b";
+            tCtx.beginPath(); tCtx.arc(15, 225, 4, 0, Math.PI * 2); tCtx.fill();
+            tCtx.beginPath(); tCtx.arc(305, 225, 4, 0, Math.PI * 2); tCtx.fill();
+
+            tCtx.fillStyle = "#22c55e";
+            tCtx.font = "bold 9px monospace";
+            tCtx.fillText("CHIP-ID: FTB-2026-VAL-X9", 20, 185);
+            tCtx.fillStyle = "#94a3b8";
+            tCtx.fillText("VAGÃO FORRAGEIRO MISTURADOR AUTOPROPULSADO", 20, 202);
+            tCtx.fillText("SISTEMA DE COMPROVAÇÃO DE NUVEM", 20, 215);
+
+            return tempCanvas.toDataURL("image/png");
+        }
+
+        // ------------------ OPERAÇÕES FIRESTORE ------------------
+        function subscribeToTratos() {
+            if (!user || isLocalFallback) return;
+            const q = query(tratosCollection);
+            
+            onSnapshot(q, (snapshot) => {
+                tratosList = [];
+                snapshot.forEach((doc) => {
+                    tratosList.push({ id: doc.id, ...doc.data() });
+                });
+                
+                tratosList.sort((a, b) => b.timestamp - a.timestamp);
+                renderTratosSelector();
+                
+                if (activeTratoDocId) {
+                    const activeDoc = tratosList.find(t => t.id === activeTratoDocId);
+                    if (activeDoc) {
+                        ingredients = activeDoc.ingredients || [];
+                        tratoTitleInput.value = activeDoc.title || "";
+                        toleranceInput.value = activeDoc.tolerance || 5;
+                        
+                        loadIngredients(ingredients, false); 
+                        updateWagonSimulationInterface(activeDoc);
+                    }
+                } else if (tratosList.length > 0) {
+                    selectTrato(tratosList[0].id);
+                } else {
+                    createNewTrato("Trato Lote 01 - Matriz");
+                }
+            }, (error) => {
+                console.warn("Inscrição remota de banco falhou. Migrando para controle offline...", error.message);
+                activateLocalFallbackMode(error.message);
+            });
+        }
+
+        async function createNewTrato(title = "") {
+            const defaultTitle = title || `Lote ${tratosList.length + 1} - ${new Date().toLocaleDateString('pt-BR')}`;
+            const newDoc = {
+                id: isLocalFallback ? "local-trato-" + Date.now() : null,
+                title: defaultTitle,
+                timestamp: Date.now(),
+                tolerance: parseFloat(toleranceInput.value) || 5,
+                ingredients: [], 
+                status: "planejado", 
+                lastUpdatedBy: isLocalFallback ? "usuario-offline-local" : (user ? user.uid : "usuario")
+            };
+
+            if (isLocalFallback) {
+                tratosList.unshift(newDoc);
+                localStorage.setItem("farmtell_tratos", JSON.stringify(tratosList));
+                activeTratoDocId = newDoc.id;
+                renderTratosSelector();
+                selectTrato(newDoc.id);
+                showNotification(`Lote "${defaultTitle}" criado localmente!`, "success");
+                return;
+            }
+            
+            if (!user) return;
+            try {
+                const docRef = await addDoc(tratosCollection, newDoc);
+                activeTratoDocId = docRef.id;
+                showNotification(`Lote "${defaultTitle}" criado com sucesso no Firestore!`, "success");
+            } catch (err) {
+                console.error("Erro ao adicionar documento:", err);
+                showNotification("Falha ao criar lote: " + err.message, "error");
+            }
+        }
+
+        async function saveActiveTrato() {
+            if (!activeTratoDocId) return;
+
+            const updatedData = {
+                title: tratoTitleInput.value || "Trato sem título",
+                tolerance: parseFloat(toleranceInput.value) || 5,
+                ingredients: ingredients,
+                lastUpdatedBy: user ? user.uid : "local-user",
+                timestamp: Date.now()
+            };
+
+            if (isLocalFallback) {
+                const index = tratosList.findIndex(t => t.id === activeTratoDocId);
+                if (index !== -1) {
+                    tratosList[index].title = tratoTitleInput.value || "Trato sem título";
+                    tratosList[index].tolerance = parseFloat(toleranceInput.value) || 5;
+                    tratosList[index].ingredients = ingredients;
+                    tratosList[index].timestamp = Date.now();
+                    localStorage.setItem("farmtell_tratos", JSON.stringify(tratosList));
+                    renderTratosSelector();
+                }
+                calculateTotals();
+                drawCanvas();
+                return;
+            }
+            
+            if (!user || !appId || !activeTratoDocId) return;
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'tratos', activeTratoDocId);
+            try {
+                await setDoc(docRef, updatedData, { merge: true });
+                calculateTotals();
+                drawCanvas();
+            } catch (err) {
+                console.error("Erro ao salvar documento:", err);
+                showNotification("Erro de gravação de rede: " + err.message, "error");
+            }
+        }
+
+        function selectTrato(id) {
+            activeTratoDocId = id;
+            const activeDoc = tratosList.find(t => t.id === id);
+            if (activeDoc) {
+                ingredients = activeDoc.ingredients || [];
+                tratoTitleInput.value = activeDoc.title || "";
+                toleranceInput.value = activeDoc.tolerance || 5;
+                
+                activeWagonIndex = null;
+                currentDisplayIndex = -1;
+                
+                loadIngredients(ingredients, false);
+                updateWagonSimulationInterface(activeDoc);
+            }
+        }
+
+        function renameActiveTrato(newTitle) {
+            if (!newTitle) return;
+            saveActiveTrato();
+        }
+
+        async function deleteActiveTrato() {
+            if (tratosList.length <= 1) {
+                showNotification("Não é possível deletar o único lote restante do sistema.", "error");
+                return;
+            }
+            confirmDeleteModal.classList.remove("hidden");
+        }
+
+        function updateClock() {
+            const timerEl = document.getElementById("wagon-timer");
+            const now = new Date();
+            if (timerEl) timerEl.textContent = now.toLocaleTimeString('pt-BR');
+        }
+
+        // 9. VINCULAÇÃO GLOBAL PARA ELEMENTOS COM ACTIONS DINÂMICAS RENDERIZADAS EM TEMPLATE STRINGS (Prevenção de Temporal Dead Zone)
+        window.updateItemField = updateItemField;
+        window.updateItemActual = updateItemActual;
+        window.removeItem = removeItem;
+        window.openVerificationModal = openVerificationModal;
+        window.closeVerificationModal = closeVerificationModal;
+        
+        window.selectTrato = selectTrato;
+        window.createNewTrato = createNewTrato;
+        window.deleteActiveTrato = deleteActiveTrato;
+        window.renameActiveTrato = renameActiveTrato;
+        window.saveActiveTrato = saveActiveTrato;
+
+        window.startTutorial = startTutorial;
+        window.nextTutorialStep = nextTutorialStep;
+        window.prevTutorialStep = prevTutorialStep;
+        window.endTutorial = endTutorial;
+        window.triggerExplainerStep = triggerExplainerStep;
+
+        // 10. ASSINATURA DE EVENTOS PROGRAMÁTICOS DIRECTAMENTE NO ESCOPO DO MÓDULO (Substitui onchange/onclick inline do HTML)
+        const btnTutorialStart = document.getElementById("btn-tutorial-start");
+        if (btnTutorialStart) btnTutorialStart.addEventListener("click", () => startTutorial(true));
+
+        if (tratosSelector) {
+            tratosSelector.addEventListener("change", (e) => {
+                selectTrato(e.target.value);
+            });
+        }
+
+        if (tratoTitleInput) {
+            tratoTitleInput.addEventListener("change", (e) => {
+                renameActiveTrato(e.target.value);
+            });
+        }
+
+        const btnCreateNewTrato = document.getElementById("btn-create-new-trato");
+        if (btnCreateNewTrato) btnCreateNewTrato.addEventListener("click", () => createNewTrato());
+
+        if (btnDeleteTrato) btnDeleteTrato.addEventListener("click", () => deleteActiveTrato());
+
+        if (toleranceInput) {
+            toleranceInput.addEventListener("change", () => {
+                saveActiveTrato();
+            });
+        }
+
+        document.querySelectorAll(".btn-explainer").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const step = parseInt(btn.getAttribute("data-step"));
+                triggerExplainerStep(step);
+            });
+        });
+
+        const btnTutorialClose = document.getElementById("btn-tutorial-close");
+        if (btnTutorialClose) btnTutorialClose.addEventListener("click", () => endTutorial());
+
+        const btnTutorialSkip = document.getElementById("btn-tutorial-skip");
+        if (btnTutorialSkip) btnTutorialSkip.addEventListener("click", () => endTutorial());
+
+        const btnTutPrev = document.getElementById("btn-tut-prev");
+        if (btnTutPrev) btnTutPrev.addEventListener("click", () => prevTutorialStep());
+
+        const btnTutNext = document.getElementById("btn-tut-next");
+        if (btnTutNext) btnTutNext.addEventListener("click", () => nextTutorialStep());
+
+        const btnVerificationClose = document.getElementById("btn-verification-close");
+        if (btnVerificationClose) btnVerificationClose.addEventListener("click", () => closeVerificationModal());
+
+        if (btnCancelDelete) {
+            btnCancelDelete.addEventListener("click", () => {
+                confirmDeleteModal.classList.add("hidden");
+            });
+        }
+
+        if (btnConfirmDelete) {
+            btnConfirmDelete.addEventListener("click", async () => {
+                confirmDeleteModal.classList.add("hidden");
+                
+                if (isLocalFallback) {
+                    tratosList = tratosList.filter(t => t.id !== activeTratoDocId);
+                    localStorage.setItem("farmtell_tratos", JSON.stringify(tratosList));
+                    activeTratoDocId = null;
+                    loadLocalTratos();
+                    showNotification("Lote apagado localmente.", "info");
+                    return;
+                }
+
+                if (!appId || !activeTratoDocId) return;
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'tratos', activeTratoDocId);
+                try {
+                    await deleteDoc(docRef);
+                    activeTratoDocId = null; 
+                    showNotification("Lote apagado do Firestore com sucesso.", "info");
+                } catch (err) {
+                    console.error("Erro ao excluir documento:", err);
+                    showNotification("Erro ao excluir: " + err.message, "error");
+                }
+            });
+        }
+
+        imageUploadInput.addEventListener("change", (e) => {
+            if (e.target.files.length > 0) {
+                processAndScanImageFile(e.target.files[0]);
+            }
+        });
+
+        dropZone.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            dropZone.classList.add("border-emerald-600", "bg-emerald-100/40");
+        });
+
+        dropZone.addEventListener("dragleave", () => {
+            dropZone.classList.remove("border-emerald-600", "bg-emerald-100/40");
+        });
+
+        dropZone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            dropZone.classList.remove("border-emerald-600", "bg-emerald-100/40");
+            if (e.dataTransfer.files.length > 0) {
+                processAndScanImageFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        btnLoadSample.addEventListener("click", () => {
+            loadIngredients(sampleIngredients, true);
+            showNotification("Amostra restaurada com sucesso no lote ativo.", "info");
+        });
+
+        btnAddRow.addEventListener("click", () => {
+            const newItem = {
+                id: Date.now(),
+                name: "Novo Ingrediente",
+                diet: tratoTitleInput.value || "TERMINAÇÃO",
+                proportion: 10.00,
+                target: 1000.00,
+                actual: 0.00,
+                deviation: -1000.00,
+                deviationPct: -100.00,
+                scalePhoto: null,
+                scaleActual: null,
+                verificationStatus: 'pending'
+            };
+            ingredients.push(newItem);
+            renderTable();
+            calculateTotals();
+            drawCanvas();
+            saveActiveTrato();
+            showNotification("Ingrediente adicionado à tabela.", "success");
+        });
+
+        btnSimLoad.addEventListener("click", () => {
+            if (ingredients.length === 0 || activeWagonIndex === null || activeWagonIndex >= ingredients.length) return;
+
+            btnSimLoad.disabled = true;
+            const item = ingredients[activeWagonIndex];
+            let currentLoaded = 0;
+            const target = item.target;
+            const simulatedSensorFinal = target * (0.98 + Math.random() * 0.04);
+
+            showNotification(`Pesando ingrediente: ${item.name}...`, "info");
+
+            if (simulationInterval) clearInterval(simulationInterval);
+            
+            simulationInterval = setInterval(() => {
+                currentLoaded += target / 15;
+                if (currentLoaded >= simulatedSensorFinal) {
+                    currentLoaded = simulatedSensorFinal;
+                    clearInterval(simulationInterval);
+                    showNotification("Estabilidade de peso atingida! Registre a foto para liberação.", "success");
+                    wagonCurrentWt.textContent = `${currentLoaded.toFixed(0)} kg`;
+                    wagonProgress.style.width = `100%`;
+                    ingredients[activeWagonIndex].tempActual = currentLoaded;
+                } else {
+                    wagonCurrentWt.textContent = `${currentLoaded.toFixed(0)} kg`;
+                    const percent = (currentLoaded / target) * 100;
+                    wagonProgress.style.width = `${Math.min(percent, 100)}%`;
+                }
+            }, 100);
+        });
+
+        btnSnapScale.addEventListener("click", async () => {
+            if (activeWagonIndex === null) return;
+            const item = ingredients[activeWagonIndex];
+            if (!item || !item.tempActual) {
+                showNotification("Realize a pesagem antes de extrair a foto de comprovação.", "error");
+                return;
+            }
+
+            const isFraud = chkSimulateFraud.checked;
+            let reportedWeight = item.tempActual;
+            let realScaleWeight = item.tempActual;
+            
+            if (isFraud) {
+                reportedWeight = item.target; 
+                realScaleWeight = item.tempActual * 0.85; 
+                showNotification("Simulação de Discrepância / Erro ativada!", "error");
+            }
+
+            const generatedPhoto = generateScalePhoto(realScaleWeight);
+            item.actual = reportedWeight;
+            item.scalePhoto = generatedPhoto;
+            item.scaleActual = realScaleWeight;
+            
+            const diff = Math.abs(reportedWeight - realScaleWeight);
+            item.verificationStatus = diff > 1.5 ? 'discrepancy' : 'approved';
+
+            recalculateRow(activeWagonIndex);
+            const targetWagonIndex = activeWagonIndex + 1;
+
+            if (isLocalFallback) {
+                const index = tratosList.findIndex(t => t.id === activeTratoDocId);
+                if (index !== -1) {
+                    tratosList[index].ingredients = ingredients;
+                    localStorage.setItem("farmtell_tratos", JSON.stringify(tratosList));
+                }
+                showNotification("Comprovação de balança salva localmente!", "success");
+                setWagonCurrentTargetItem(targetWagonIndex);
+                calculateTotals();
+                drawCanvas();
+                return;
+            }
+
+            if (!appId || !activeTratoDocId) return;
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'tratos', activeTratoDocId);
+            try {
+                await updateDoc(docRef, { ingredients: ingredients });
+                showNotification("Comprovação de balança enviada com sucesso ao banco!", "success");
+                setWagonCurrentTargetItem(targetWagonIndex);
+            } catch(e) {
+                showNotification("Erro de rede ao salvar foto: " + e.message, "error");
+            }
+        });
+
+        scalePhotoUpload.addEventListener("change", (e) => {
+            if (activeWagonIndex === null) return;
+            const item = ingredients[activeWagonIndex];
+            if (!item || !item.tempActual) {
+                showNotification("Realize a pesagem física antes de anexar imagem.", "error");
+                return;
+            }
+
+            if (e.target.files.length > 0) {
+                const reader = new FileReader();
+                reader.onload = async function(evt) {
+                    item.actual = item.tempActual;
+                    item.scalePhoto = evt.target.result;
+                    item.scaleActual = item.tempActual;
+                    item.verificationStatus = 'approved';
+
+                    recalculateRow(activeWagonIndex);
+                    const targetWagonIndex = activeWagonIndex + 1;
+
+                    if (isLocalFallback) {
+                        const index = tratosList.findIndex(t => t.id === activeTratoDocId);
+                        if (index !== -1) {
+                            tratosList[index].ingredients = ingredients;
+                            localStorage.setItem("farmtell_tratos", JSON.stringify(tratosList));
+                        }
+                        showNotification("Comprovante anexo salvo localmente!", "success");
+                        setWagonCurrentTargetItem(targetWagonIndex);
+                        calculateTotals();
+                        drawCanvas();
+                        return;
+                    }
+
+                    if (!appId || !activeTratoDocId) return;
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'tratos', activeTratoDocId);
+                    await updateDoc(docRef, { ingredients: ingredients });
+                    showNotification("Comprovante anexado no banco!", "success");
+                    setWagonCurrentTargetItem(targetWagonIndex);
+                };
+                reader.readAsDataURL(e.target.files[0]);
+            }
+        });
+
+        // Chamadas e escutas de inicialização ao final de todo o escopo definido
+        initAuth();
+        updateClock();
+        setInterval(updateClock, 1000);
+
+    </script>
+</body>
+</html>

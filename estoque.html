@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuditPro Estoque</title>
+    
+    <!-- Tailwind CSS para Estilização -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Ícones Lucide -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Fonte Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Animação suave para troca de painéis */
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+        /* Esconde barra de rolagem mas mantém funcionalidade */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-slate-900 text-white shadow-md z-10 relative flex-shrink-0">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-blue-500 p-2 rounded-lg flex items-center justify-center">
+                        <i data-lucide="check-circle-2" class="w-6 h-6 text-white"></i>
+                    </div>
+                    <h1 class="text-xl font-bold tracking-tight">AuditPro <span class="font-light text-slate-300">Estoque</span></h1>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center bg-slate-800 rounded-lg px-3 py-1.5 border border-slate-700">
+                        <span class="text-slate-400 text-sm mr-2 hidden sm:inline">Auditor:</span>
+                        <input 
+                            type="text" 
+                            id="auditor-name"
+                            placeholder="Seu nome..."
+                            class="bg-transparent text-white text-sm font-medium focus:outline-none placeholder:text-slate-500 w-28 sm:w-32"
+                        />
+                    </div>
+                    <div class="text-sm font-medium text-slate-300 hidden sm:block" id="current-date">
+                        <!-- Data atual via JS -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tabs -->
+            <div class="flex space-x-1 mt-2 overflow-x-auto no-scrollbar" id="tabs-container">
+                <button data-tab="racao" class="tab-btn flex items-center space-x-2 px-6 py-3 rounded-t-lg font-medium transition-colors whitespace-nowrap bg-slate-50 text-slate-900">
+                    <i data-lucide="package" class="w-5 h-5"></i>
+                    <span>Armazém Ração</span>
+                </button>
+                <button data-tab="adubo" class="tab-btn flex items-center space-x-2 px-6 py-3 rounded-t-lg font-medium transition-colors whitespace-nowrap text-slate-400 hover:bg-slate-800">
+                    <i data-lucide="leaf" class="w-5 h-5"></i>
+                    <span>Armazém Adubo</span>
+                </button>
+                <button data-tab="recebimentos" class="tab-btn flex items-center space-x-2 px-6 py-3 rounded-t-lg font-medium transition-colors whitespace-nowrap text-slate-400 hover:bg-slate-800">
+                    <i data-lucide="truck" class="w-5 h-5"></i>
+                    <span>Recebimentos (NFes)</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full flex flex-col md:flex-row gap-6 overflow-hidden">
+        
+        <!-- Sidebar Esquerda (Lista) -->
+        <div id="left-sidebar" class="w-full md:w-5/12 lg:w-1/3 flex flex-col h-full transition-all">
+            
+            <!-- Dashboard Stats -->
+            <div id="stats-container" class="grid grid-cols-3 gap-3 mb-4">
+                <!-- Preenchido via JS -->
+            </div>
+
+            <!-- Lista de Itens -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col min-h-0">
+                <div class="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
+                    <div class="relative">
+                        <i data-lucide="search" class="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
+                        <input
+                            type="text"
+                            id="search-input"
+                            placeholder="Buscar..."
+                            class="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        />
+                    </div>
+                </div>
+
+                <div id="list-container" class="overflow-y-auto flex-1 p-2 space-y-2">
+                    <!-- Itens Preenchidos via JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Painel Direito (Auditoria/Detalhes) -->
+        <div id="right-panel" class="w-full md:w-7/12 lg:w-2/3 h-full hidden md:block overflow-hidden">
+            <!-- Conteúdo Preenchido via JS -->
+        </div>
+
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ==========================================
+        // 1. CONFIGURAÇÃO FIREBASE (ATUALIZE AQUI)
+        // ==========================================
+        const firebaseConfig = {
+            // COLE AQUI AS CREDENCIAIS DO SEU FIREBASE PARA RODAR NO VS CODE
+            apiKey: "COLE_SUA_API_KEY_AQUI",
+            authDomain: "seu-projeto.firebaseapp.com",
+            projectId: "seu-projeto",
+            storageBucket: "seu-projeto.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef"
+        };
+        
+        // Se estiver rodando no ambiente imersivo, ele usa as configs injetadas
+        const finalConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'estoque-auditoria-local';
+
+        let app, auth, db, user;
+        
+        // Inicializa App
+        try {
+            app = initializeApp(finalConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) {
+            console.warn("Firebase não inicializado corretamente. Verifique as configurações.", e);
+        }
+
+        // ==========================================
+        // 2. BASE DE DADOS LOCAL (MOCKS)
+        // ==========================================
+        const mockFeedData = [
+            { id: '027', code: '027', name: 'SILAGEM DE BRACHIARIA - ÚNICA', type: 'INSUMO', sapiensQty: 10800322 },
+            { id: '014', code: '014', name: 'SILAGEM DE MILHETO - ÚNICA', type: 'INSUMO', sapiensQty: 10800322 },
+            { id: '61038', code: '61038', name: 'MILHO EM GRAOS ADQUIRIDO TERCEIROS', type: 'INSUMO', sapiensQty: 677083 },
+            { id: '121004', code: '121004', name: 'DDG S - ÚNICA', type: 'INSUMO', sapiensQty: 511960 },
+            { id: '111357', code: '111357', name: 'NUCLEO MINERAL IMPACTO PRO BAG', type: 'INSUMO', sapiensQty: 56394 },
+            { id: '62563', code: '62563', name: 'SAL BRANCO CIMSAL', type: 'INSUMO', sapiensQty: 37131 },
+            { id: '03261', code: '03261', name: 'UREIA AGRICOLA', type: 'INSUMO', sapiensQty: 5930 },
+            { id: '121997', code: '121997', name: 'RACAO FORMULADA TROPA AGROCERES 2026', type: 'FORMULADO', sapiensQty: 6000 }
+        ];
+
+        const mockFertilizerData = [
+            { id: '117059', code: '117059', name: 'FERTILIZANTE MICROESSENTIALS MOSAIC MPPS9 10 46 0', type: 'INSUMO', sapiensQty: 5392785 },
+            { id: '112717', code: '112717', name: 'KCL GRANULADO 60%K2O CA', type: 'INSUMO', sapiensQty: 849794.7 },
+            { id: '03261a', code: '03261', name: 'UREIA AGRICOLA', type: 'INSUMO', sapiensQty: 488671.2 },
+            { id: '117995', code: '117995', name: 'FERTILIZANTE NPK 22-00-22 N UR GR BB MCF', type: 'INSUMO', sapiensQty: 476307 },
+            { id: '101275', code: '101275', name: 'FERTILIZANTE GRANULADO SULFATO DE AMONIO', type: 'INSUMO', sapiensQty: 94060 },
+            { id: '74906', code: '74906', name: 'MIDAS (ENXOFRE)', type: 'INSUMO', sapiensQty: 18954.54 },
+            { id: '109496', code: '109496', name: 'ADUBO FORMULADO 3C-2024', type: 'FORMULADO', sapiensQty: 16000 }
+        ];
+
+        const mockRecebimentosData = [
+            { id: 'r11', code: '74906', name: 'ENXOFRE MIDAS (GRANULADO)', supplier: 'NITRO', volume: 50.000, nfe: '331853', date: '26/06/2026', location: 'ARMAZÉM (BIG BAG)', status: 'OK' },
+            { id: 'r12', code: '74906', name: 'ENXOFRE MIDAS (GRANULADO)', supplier: 'NITRO', volume: 50.000, nfe: '331851', date: '29/06/2026', location: 'ARMAZÉM (BIG BAG)', status: 'OK' },
+            { id: 'r15', code: '112717', name: 'KCL GRANULADO 60%K2O CA', supplier: 'LDC', volume: 47.810, nfe: '7889', date: '20/05/2026', location: 'MISTURADORA (MOEGA)', status: 'OK' },
+            { id: 'r17', code: '112717', name: 'KCL GRANULADO 60%K2O CA', supplier: 'LDC', volume: 47.890, nfe: '10936', date: '26/06/2026', location: 'MISTURADORA (MOEGA)', status: 'PENDENTE' },
+            { id: 'r1', code: '121004', name: 'DDG S', supplier: 'IN PASA 144874', volume: 46.980, nfe: '191779', date: '01/07/2026', location: 'CRISTO REI', status: 'PENDENTE' },
+            { id: 'r3', code: '112844', name: 'RUMITECH BEEF', supplier: 'NUTRIPURA', volume: 37.000, nfe: '84647', date: '26/06/2026', location: 'CRISTO REI', status: 'OK' },
+        ];
+
+        // ==========================================
+        // 3. ESTADO DA APLICAÇÃO
+        // ==========================================
+        let state = {
+            activeTab: 'racao', // 'racao', 'adubo', 'recebimentos'
+            searchQuery: '',
+            selectedItem: null,
+            auditorName: '',
+            auditRecords: {}, // Dados vindos do Firestore
+            
+            // Formulário Ativo
+            formQty: '',
+            formObservation: '',
+            formPhotos: []
+        };
+
+        // ==========================================
+        // 4. FUNÇÕES DE RENDERIZAÇÃO UI
+        // ==========================================
+        const DOM = {
+            tabs: document.querySelectorAll('.tab-btn'),
+            statsContainer: document.getElementById('stats-container'),
+            listContainer: document.getElementById('list-container'),
+            rightPanel: document.getElementById('right-panel'),
+            searchInput: document.getElementById('search-input'),
+            auditorInput: document.getElementById('auditor-name'),
+            dateDisplay: document.getElementById('current-date'),
+            leftSidebar: document.getElementById('left-sidebar')
+        };
+
+        function getCurrentData() {
+            if (state.activeTab === 'racao') return mockFeedData;
+            if (state.activeTab === 'adubo') return mockFertilizerData;
+            return mockRecebimentosData;
+        }
+
+        function updateUI() {
+            renderTabs();
+            renderStats();
+            renderList();
+            renderRightPanel();
+            lucide.createIcons();
+            
+            // Controle Mobile Responsivo
+            if (state.selectedItem) {
+                DOM.leftSidebar.classList.add('hidden', 'md:flex');
+                DOM.rightPanel.classList.remove('hidden');
+            } else {
+                DOM.leftSidebar.classList.remove('hidden');
+                DOM.rightPanel.classList.add('hidden', 'md:block');
+            }
+        }
+
+        function renderTabs() {
+            DOM.tabs.forEach(btn => {
+                const isActive = btn.dataset.tab === state.activeTab;
+                if (isActive) {
+                    btn.className = "tab-btn flex items-center space-x-2 px-6 py-3 rounded-t-lg font-medium transition-colors whitespace-nowrap bg-slate-50 text-slate-900";
+                } else {
+                    btn.className = "tab-btn flex items-center space-x-2 px-6 py-3 rounded-t-lg font-medium transition-colors whitespace-nowrap text-slate-400 hover:bg-slate-800";
+                }
+            });
+            
+            DOM.searchInput.placeholder = state.activeTab === 'recebimentos' 
+                ? "Buscar por NFe, nome ou fornecedor..." 
+                : "Buscar por código ou nome...";
+        }
+
+        function renderStats() {
+            if (state.activeTab === 'recebimentos') {
+                DOM.statsContainer.innerHTML = '';
+                DOM.statsContainer.style.display = 'none';
+                return;
+            }
+            DOM.statsContainer.style.display = 'grid';
+
+            const data = getCurrentData();
+            let audited = 0;
+            let conflicts = 0;
+
+            data.forEach(item => {
+                const record = state.auditRecords[item.id];
+                if (record) {
+                    audited++;
+                    if (record.conflict !== 0) conflicts++;
+                }
+            });
+
+            DOM.statsContainer.innerHTML = `
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center">
+                    <span class="text-2xl font-bold text-slate-700">${data.length}</span>
+                    <span class="text-[10px] sm:text-xs text-slate-500 uppercase tracking-wider font-semibold">Total</span>
+                </div>
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center">
+                    <span class="text-2xl font-bold text-blue-600">${audited}</span>
+                    <span class="text-[10px] sm:text-xs text-slate-500 uppercase tracking-wider font-semibold">Auditados</span>
+                </div>
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center">
+                    <span class="text-2xl font-bold ${conflicts > 0 ? 'text-red-500' : 'text-green-500'}">${conflicts}</span>
+                    <span class="text-[10px] sm:text-xs text-slate-500 uppercase tracking-wider font-semibold">Conflitos</span>
+                </div>
+            `;
+        }
+
+        function renderList() {
+            const data = getCurrentData();
+            const searchLower = state.searchQuery.toLowerCase();
+            
+            const filtered = data.filter(item => {
+                if (state.activeTab === 'recebimentos') {
+                    return item.name.toLowerCase().includes(searchLower) || 
+                           item.nfe.includes(state.searchQuery) ||
+                           item.supplier.toLowerCase().includes(searchLower);
+                }
+                return item.name.toLowerCase().includes(searchLower) || 
+                       item.code.includes(state.searchQuery);
+            });
+
+            if (filtered.length === 0) {
+                DOM.listContainer.innerHTML = `<div class="text-center p-8 text-slate-400">Nenhum registro encontrado.</div>`;
+                return;
+            }
+
+            DOM.listContainer.innerHTML = filtered.map(item => {
+                const isSelected = state.selectedItem && state.selectedItem.id === item.id;
+                const baseClass = `w-full text-left p-3 rounded-lg border transition-all duration-200 group ${isSelected ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-slate-100 hover:border-slate-300 hover:bg-slate-50'}`;
+                
+                if (state.activeTab === 'recebimentos') {
+                    return `
+                        <button data-id="${item.id}" class="list-item-btn ${baseClass} flex flex-col">
+                            <div class="flex justify-between w-full mb-1 items-center">
+                                <span class="text-[10px] font-bold text-slate-700 bg-slate-200 px-2 py-0.5 rounded">NFe: ${item.nfe}</span>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded ${item.status === 'OK' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}">${item.status}</span>
+                            </div>
+                            <p class="text-sm font-semibold text-slate-800 truncate w-full" title="${item.name}">${item.name}</p>
+                            <p class="text-xs text-slate-500 truncate w-full mt-1">${item.supplier} - ${item.date}</p>
+                        </button>
+                    `;
+                }
+
+                const record = state.auditRecords[item.id];
+                const isAudited = !!record;
+                let statusIcon = '';
+                if (isAudited) {
+                    const iconName = record.conflict === 0 ? 'check-circle-2' : 'alert-circle';
+                    const color = record.conflict === 0 ? 'text-green-500' : 'text-orange-500';
+                    statusIcon = `
+                        <div class="flex flex-col items-end space-y-1 ml-2">
+                            <i data-lucide="${iconName}" class="w-5 h-5 flex-shrink-0 ${color}"></i>
+                            <span class="text-[10px] text-slate-400 font-medium truncate max-w-[70px]">${record.auditorName}</span>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <button data-id="${item.id}" class="list-item-btn ${baseClass} flex items-center justify-between">
+                        <div class="flex-1 min-w-0 pr-2">
+                            <div class="flex items-center space-x-2 mb-1">
+                                <span class="text-[10px] font-mono bg-slate-200 text-slate-600 px-2 py-0.5 rounded">${item.code}</span>
+                                <span class="text-[10px] font-semibold text-slate-400 uppercase">${item.type}</span>
+                            </div>
+                            <p class="text-sm font-medium text-slate-800 truncate" title="${item.name}">${item.name}</p>
+                        </div>
+                        ${statusIcon}
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function renderRightPanel() {
+            if (!state.selectedItem) {
+                DOM.rightPanel.innerHTML = `
+                    <div class="h-full bg-white rounded-xl border border-slate-200 border-dashed flex flex-col items-center justify-center text-slate-400 p-8">
+                        <i data-lucide="package" class="w-16 h-16 mb-4 text-slate-300"></i>
+                        <h3 class="text-xl font-medium text-slate-600 mb-2">Selecione um Produto</h3>
+                        <p class="text-center max-w-md">Busque ou clique em um item na lista para iniciar a auditoria ou ver detalhes do recebimento.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const item = state.selectedItem;
+
+            if (state.activeTab === 'recebimentos') {
+                DOM.rightPanel.innerHTML = `
+                    <div class="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden h-full flex flex-col fade-in">
+                        <div class="p-4 sm:p-6 border-b border-slate-100 bg-blue-50/30">
+                            <!-- Mobile Back Button -->
+                            <button id="btn-back-mobile" class="md:hidden flex items-center text-slate-500 hover:text-slate-700 mb-4">
+                                <i data-lucide="arrow-left" class="w-5 h-5 mr-1"></i> Voltar à lista
+                            </button>
+                            <div class="flex items-center space-x-3 mb-4">
+                                <i data-lucide="truck" class="w-8 h-8 text-blue-500"></i>
+                                <h2 class="text-xl sm:text-2xl font-bold text-slate-800">Detalhes do Recebimento</h2>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                                    <p class="text-xs text-slate-400 uppercase font-semibold">Produto</p>
+                                    <p class="text-lg font-bold text-slate-800">${item.name}</p>
+                                    <p class="text-sm text-slate-500">Código: ${item.code}</p>
+                                </div>
+                                <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                                    <p class="text-xs text-slate-400 uppercase font-semibold">Volume (Kg)</p>
+                                    <p class="text-2xl font-bold text-blue-600">${Number(item.volume).toLocaleString('pt-BR', { minimumFractionDigits: 3 })}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-4 sm:p-6 flex-1 bg-slate-50 overflow-y-auto">
+                            <h3 class="text-sm font-semibold text-slate-500 uppercase mb-4">Informações do Documento</h3>
+                            <div class="space-y-4 bg-white p-4 rounded-xl border border-slate-200">
+                                <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                                    <span class="text-slate-500 text-sm">NFe</span>
+                                    <span class="font-bold text-slate-800">${item.nfe}</span>
+                                </div>
+                                <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                                    <span class="text-slate-500 text-sm">Fornecedor</span>
+                                    <span class="font-bold text-slate-800 text-right max-w-[60%]">${item.supplier}</span>
+                                </div>
+                                <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                                    <span class="text-slate-500 text-sm">Data de Recebimento</span>
+                                    <span class="font-bold text-slate-800">${item.date}</span>
+                                </div>
+                                <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                                    <span class="text-slate-500 text-sm">Localização</span>
+                                    <span class="font-bold text-slate-800 text-right max-w-[60%]">${item.location}</span>
+                                </div>
+                                <div class="flex justify-between items-center pt-2">
+                                    <span class="text-slate-500 text-sm">Status</span>
+                                    <span class="font-bold px-3 py-1 rounded-full text-xs ${item.status === 'OK' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}">${item.status}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Auditoria
+                const record = state.auditRecords[item.id];
+                const isAudited = !!record;
+                
+                let conflictHTML = '';
+                if (state.formQty !== '') {
+                    const conf = parseFloat(state.formQty) - item.sapiensQty;
+                    let cText, cColor, cBg, cIcon;
+                    if (conf === 0) { cText = 'Bateu'; cColor = 'text-green-600'; cBg = 'bg-green-100'; cIcon = 'check-circle-2'; }
+                    else if (conf > 0) { cText = 'Sobra Físico'; cColor = 'text-orange-600'; cBg = 'bg-orange-100'; cIcon = 'alert-circle'; }
+                    else { cText = 'Falta Físico'; cColor = 'text-red-600'; cBg = 'bg-red-100'; cIcon = 'alert-circle'; }
+                    
+                    conflictHTML = `
+                        <div class="mt-4 flex items-center justify-between p-3 rounded-lg ${cBg} ${cColor}">
+                            <div class="flex items-center space-x-2">
+                                <i data-lucide="${cIcon}" class="w-5 h-5"></i>
+                                <span class="font-semibold text-sm uppercase tracking-wide">${cText}</span>
+                            </div>
+                            <span class="font-bold">${conf > 0 ? '+' : ''}${conf.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                    `;
+                }
+
+                let photosHTML = state.formPhotos.map((url, idx) => `
+                    <div class="aspect-square rounded-xl overflow-hidden relative group shadow-sm border border-slate-200">
+                        <img src="${url}" alt="Evidência ${idx + 1}" class="w-full h-full object-cover" />
+                        <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <button data-pic-idx="${idx}" class="btn-remove-photo bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transform hover:scale-110 transition-all">
+                                <i data-lucide="x" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+
+                const noPhotosHTML = state.formPhotos.length === 0 ? `
+                    <p class="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg mt-4 flex items-center border border-amber-200 col-span-full">
+                        <i data-lucide="alert-circle" class="w-4 h-4 mr-2 flex-shrink-0"></i>
+                        É recomendável anexar fotos para comprovar divergências de saldo.
+                    </p>
+                ` : '';
+
+                DOM.rightPanel.innerHTML = `
+                    <div class="bg-white rounded-xl shadow-lg border border-slate-200 h-full flex flex-col fade-in relative">
+                        <div class="p-4 sm:p-6 border-b border-slate-100 bg-slate-50/50">
+                            <!-- Mobile Back Button -->
+                            <button id="btn-back-mobile" class="md:hidden flex items-center text-slate-500 hover:text-slate-700 mb-4">
+                                <i data-lucide="arrow-left" class="w-5 h-5 mr-1"></i> Voltar à lista
+                            </button>
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h2 class="text-xl sm:text-2xl font-bold text-slate-800 mb-2 leading-tight">${item.name}</h2>
+                                    <div class="flex space-x-4 text-xs sm:text-sm text-slate-500">
+                                        <span class="flex items-center"><i data-lucide="package" class="w-3 h-3 sm:w-4 sm:h-4 mr-1"></i> Cód: ${item.code}</span>
+                                        <span class="flex items-center"><i data-lucide="info" class="w-3 h-3 sm:w-4 sm:h-4 mr-1"></i> Tipo: ${item.type}</span>
+                                    </div>
+                                </div>
+                                ${isAudited ? '<span class="hidden sm:inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Auditado</span>' : ''}
+                            </div>
+                        </div>
+
+                        <div class="p-4 sm:p-6 flex-1 overflow-y-auto no-scrollbar">
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8 mb-8">
+                                
+                                <div class="bg-slate-50 rounded-xl p-5 border border-slate-200">
+                                    <h3 class="text-xs sm:text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center">
+                                        <span class="w-2 h-2 rounded-full bg-slate-400 mr-2"></span> Saldo Sapiens
+                                    </h3>
+                                    <div class="text-3xl sm:text-4xl font-light text-slate-700 truncate">
+                                        ${item.sapiensQty.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                        <span class="text-sm sm:text-lg text-slate-400 ml-1">Kg/Un</span>
+                                    </div>
+                                    <p class="text-[10px] sm:text-xs text-slate-400 mt-2">Bloqueado para edição.</p>
+                                </div>
+
+                                <div class="bg-blue-50/50 rounded-xl p-5 border border-blue-200 shadow-inner">
+                                    <h3 class="text-xs sm:text-sm font-semibold text-blue-800 uppercase tracking-wider mb-4 flex items-center">
+                                        <span class="w-2 h-2 rounded-full bg-blue-500 mr-2"></span> Saldo Físico
+                                    </h3>
+                                    <div class="relative">
+                                        <input
+                                            type="number"
+                                            id="input-qty"
+                                            value="${state.formQty}"
+                                            placeholder="0.00"
+                                            class="w-full text-2xl sm:text-4xl font-bold text-slate-900 bg-white border-2 border-blue-200 rounded-lg py-2 px-3 sm:px-4 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all placeholder:text-slate-300"
+                                        />
+                                        <span class="absolute right-3 sm:right-4 top-1/2 transform -translate-y-1/2 text-slate-400 text-sm sm:text-base font-medium">Kg/Un</span>
+                                    </div>
+                                    <div id="conflict-wrapper">
+                                        ${conflictHTML}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="border-t border-slate-200 pt-6 mb-8">
+                                <h3 class="text-xs sm:text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4 flex items-center">
+                                    <i data-lucide="message-square" class="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-slate-500"></i> Observações e Justificativas
+                                </h3>
+                                <textarea
+                                    id="input-obs"
+                                    placeholder="Ex: 3 pallets com 210 sacos de 30 KG..."
+                                    class="w-full h-24 p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-slate-700 bg-white text-sm"
+                                >${state.formObservation}</textarea>
+                            </div>
+
+                            <div class="border-t border-slate-200 pt-8">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-base sm:text-lg font-bold text-slate-800 flex items-center">
+                                        <i data-lucide="camera" class="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-slate-500"></i> Evidências
+                                    </h3>
+                                    <span class="text-xs sm:text-sm text-slate-500 font-medium bg-slate-100 px-3 py-1 rounded-full">${state.formPhotos.length} Anexada(s)</span>
+                                </div>
+                                
+                                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
+                                    <button id="btn-add-photo" class="aspect-square rounded-xl border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50 flex flex-col items-center justify-center text-slate-500 hover:text-blue-600 transition-colors group">
+                                        <i data-lucide="upload-cloud" class="w-6 h-6 sm:w-8 sm:h-8 mb-2 group-hover:scale-110 transition-transform"></i>
+                                        <span class="text-xs sm:text-sm font-medium">Tirar Foto</span>
+                                    </button>
+                                    ${photosHTML}
+                                </div>
+                                ${noPhotosHTML}
+                            </div>
+                        </div>
+
+                        <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end space-x-3 shrink-0">
+                            <button id="btn-cancel" class="px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg text-slate-600 font-medium hover:bg-slate-200 transition-colors text-sm sm:text-base">
+                                Cancelar
+                            </button>
+                            <button id="btn-save" ${state.formQty === '' ? 'disabled' : ''} class="px-4 sm:px-6 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base">
+                                <i data-lucide="save" class="w-4 h-4 sm:w-5 sm:h-5 mr-2"></i> Salvar
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // ==========================================
+        // 5. EVENT LISTENERS
+        // ==========================================
+
+        // Data Atual
+        DOM.dateDisplay.textContent = new Date().toLocaleDateString('pt-BR');
+
+        // Auditor Name Input
+        DOM.auditorInput.addEventListener('input', (e) => {
+            state.auditorName = e.target.value;
+        });
+
+        // Search Input
+        DOM.searchInput.addEventListener('input', (e) => {
+            state.searchQuery = e.target.value;
+            renderList();
+            lucide.createIcons();
+        });
+
+        // Tabs
+        DOM.tabs.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                state.activeTab = e.currentTarget.dataset.tab;
+                state.selectedItem = null;
+                state.searchQuery = '';
+                DOM.searchInput.value = '';
+                updateUI();
+            });
+        });
+
+        // Clique na Lista (Event Delegation)
+        DOM.listContainer.addEventListener('click', (e) => {
+            const btn = e.target.closest('.list-item-btn');
+            if (btn) {
+                const id = btn.dataset.id;
+                const data = getCurrentData();
+                const item = data.find(i => i.id === id);
+                
+                if (item) {
+                    state.selectedItem = item;
+                    // Se não for recebimento, carrega os dados salvos do formulário
+                    if (state.activeTab !== 'recebimentos') {
+                        const record = state.auditRecords[id];
+                        if (record) {
+                            state.formQty = record.physicalQty.toString();
+                            state.formObservation = record.observation || '';
+                            state.formPhotos = record.photos ? [...record.photos] : [];
+                        } else {
+                            state.formQty = '';
+                            state.formObservation = '';
+                            state.formPhotos = [];
+                        }
+                    }
+                    updateUI();
+                }
+            }
+        });
+
+        // Eventos do Painel Direito (Event Delegation)
+        DOM.rightPanel.addEventListener('input', (e) => {
+            if (e.target.id === 'input-qty') {
+                state.formQty = e.target.value;
+                // Re-render apenas o botão e conflito por performance
+                renderRightPanel(); 
+                lucide.createIcons();
+                // Retorna foco
+                const input = document.getElementById('input-qty');
+                if(input) { input.focus(); }
+            } else if (e.target.id === 'input-obs') {
+                state.formObservation = e.target.value;
+            }
+        });
+
+        DOM.rightPanel.addEventListener('click', (e) => {
+            // Cancelar
+            if (e.target.closest('#btn-cancel')) {
+                state.selectedItem = null;
+                updateUI();
+            }
+            
+            // Voltar (Mobile)
+            if (e.target.closest('#btn-back-mobile')) {
+                state.selectedItem = null;
+                updateUI();
+            }
+
+            // Adicionar Foto
+            if (e.target.closest('#btn-add-photo')) {
+                // Simula upload de imagem. (Para enviar reais para o Firestore sem estourar limite, use Firebase Storage)
+                const newPhoto = `https://picsum.photos/seed/${Math.random()}/200/200`;
+                state.formPhotos.push(newPhoto);
+                renderRightPanel();
+                lucide.createIcons();
+            }
+
+            // Remover Foto
+            const btnRemove = e.target.closest('.btn-remove-photo');
+            if (btnRemove) {
+                const idx = parseInt(btnRemove.dataset.picIdx);
+                state.formPhotos.splice(idx, 1);
+                renderRightPanel();
+                lucide.createIcons();
+            }
+
+            // Salvar
+            if (e.target.closest('#btn-save')) {
+                salvarAuditoria();
+            }
+        });
+
+        // ==========================================
+        // 6. LÓGICA DE SALVAMENTO (FIREBASE)
+        // ==========================================
+
+        async function salvarAuditoria() {
+            if (!state.selectedItem || !db || !user) {
+                alert("Erro: Firebase não inicializado ou usuário não autenticado.");
+                return;
+            }
+
+            const item = state.selectedItem;
+            const qty = parseFloat(state.formQty) || 0;
+            const conflict = qty - item.sapiensQty;
+            const record = {
+                auditorName: state.auditorName || 'Não identificado',
+                physicalQty: qty,
+                observation: state.formObservation,
+                conflict: conflict,
+                photos: state.formPhotos, // Array de URLs salvos no documento
+                auditedAt: new Date().toISOString()
+            };
+
+            // UI feedback imediato
+            const btn = document.getElementById('btn-save');
+            if (btn) { btn.innerHTML = '<i data-lucide="loader" class="w-5 h-5 mr-2 animate-spin"></i> Salvando...'; lucide.createIcons(); }
+
+            try {
+                // Caminho obrigatório (Public Data) conforme regras do ambiente
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'audits', item.id);
+                await setDoc(docRef, record);
+                
+                // Volta para a lista
+                state.selectedItem = null;
+                state.searchQuery = '';
+                DOM.searchInput.value = '';
+                updateUI();
+            } catch (error) {
+                console.error("Erro ao salvar:", error);
+                alert("Erro ao salvar no banco de dados.");
+                if (btn) { btn.innerHTML = '<i data-lucide="save" class="w-5 h-5 mr-2"></i> Salvar'; lucide.createIcons(); }
+            }
+        }
+
+        function ouvirAuditorias() {
+            if (!db || !user) return;
+
+            const auditsCol = collection(db, 'artifacts', appId, 'public', 'data', 'audits');
+            
+            // Listener em tempo real sem queries complexas (Regra 2)
+            onSnapshot(auditsCol, (snapshot) => {
+                const newRecords = {};
+                snapshot.forEach(doc => {
+                    newRecords[doc.id] = doc.data();
+                });
+                state.auditRecords = newRecords;
+                
+                // Atualiza a tela se os dados mudarem no fundo
+                updateUI();
+            }, (error) => {
+                console.error("Erro no onSnapshot:", error);
+            });
+        }
+
+        // ==========================================
+        // 7. INICIALIZAÇÃO
+        // ==========================================
+        async function init() {
+            updateUI(); // Renderiza vazio primeiro
+
+            if (auth) {
+                try {
+                    // Autenticação obrigatória (Regra 3)
+                    const userCredential = await signInAnonymously(auth);
+                    user = userCredential.user;
+                    console.log("Conectado ao Firebase com UID:", user.uid);
+                    
+                    // Inicia listener de dados
+                    ouvirAuditorias();
+                } catch (error) {
+                    console.error("Erro de autenticação Firebase:", error);
+                }
+            } else {
+                console.warn("Rodando apenas com dados locais em memória. Firebase desativado.");
+            }
+        }
+
+        // Roda ao carregar
+        init();
+
+    </script>
+</body>
+</html>

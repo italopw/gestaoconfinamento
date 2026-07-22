@@ -1,0 +1,1582 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATTO Sementes | Transferência de A Granel</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- PDF Generation Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        atto: {
+                            light: '#4ade80',
+                            DEFAULT: '#15803d',
+                            dark: '#14532d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #f8fafc; }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .tab-content {
+            display: none;
+            animation: slideIn 0.4s ease-out forwards;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .nav-link {
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease-in-out;
+        }
+        
+        .nav-link.active {
+            border-bottom-color: #15803d;
+            color: #15803d;
+            font-weight: 600;
+        }
+        
+        /* Custom scrollbar for photo previews */
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+    </style>
+</head>
+<body class="text-gray-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Initial Loader -->
+    <div id="initial-loader" class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-atto-dark text-white">
+        <div class="w-16 h-16 border-4 border-atto-light border-t-white rounded-full animate-spin mb-4"></div>
+        <h2 class="text-3xl font-bold tracking-tight mb-2">ATTO Sementes</h2>
+        <p class="text-green-200/80 text-sm">Conectando ao sistema de expedição...</p>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-atto text-white shadow-md z-10">
+        <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <a href="menu.html" title="Voltar ao Menu" class="flex items-center justify-center h-10 w-10 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors">
+                    <i class="ph ph-layout text-xl"></i>
+                </a>
+                <div class="bg-white text-atto p-1.5 rounded-lg">
+                    <i class="ph-fill ph-plant text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold leading-tight">ATTO Sementes</h1>
+                    <p class="text-xs text-green-200 uppercase tracking-wider font-semibold">Transferência de A Granel</p>
+                </div>
+            </div>
+            <div class="hidden sm:flex items-center gap-4">
+                <div class="hidden sm:flex items-center text-sm bg-atto-dark px-3 py-1.5 rounded-full font-medium">
+                    <i class="ph ph-truck mr-2 text-lg"></i>
+                    Movimentação Interna
+                </div>
+                <div id="user-area" class="hidden sm:flex items-center gap-3 text-sm text-white">
+                    <span id="user-info" class="font-medium"></span>
+                    <button id="signout-btn" onclick="signOutUser()" class="hidden bg-white text-atto px-3 py-1 rounded-full font-medium">Sair</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <div class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="max-w-6xl mx-auto px-4 flex gap-6">
+            <button onclick="switchTab('form')" id="nav-form" class="nav-link active py-4 px-2 text-gray-500 hover:text-atto flex items-center gap-2 focus:outline-none">
+                <i class="ph ph-clipboard-text text-xl"></i>
+                Nova Expedição
+            </button>
+            <button onclick="verificarAcessoAdmin()" id="nav-admin" class="nav-link py-4 px-2 text-gray-500 hover:text-atto flex items-center gap-2 focus:outline-none">
+                <i class="ph ph-kanban text-xl"></i>
+                Administração
+                <i class="ph-fill ph-lock-key text-sm ml-1 text-gray-400"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow w-full max-w-6xl mx-auto px-4 py-8">
+        
+        <!-- TAB 1: FORM -->
+        <section id="tab-form" class="tab-content active">
+            <div class="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="bg-gray-50/50 p-6 border-b border-gray-100">
+                    <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                        <i class="ph ph-package text-atto"></i>
+                        Formulário de Transferência de A granel
+                    </h2>
+                    <p class="text-gray-500 text-sm mt-1">Utilize este formulário para registrar a movimentação interna de formulados Adubo / Pecuária.</p>
+                </div>
+                
+                <form id="expedicao-form" class="p-6 md:p-8 space-y-6" onsubmit="submitExpedicao(event)">
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Responsável -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Responsável Expedição <span class="text-red-500">*</span></label>
+                            <input type="text" id="responsavel" required placeholder="Seu nome completo" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto transition-all outline-none">
+                        </div>
+                        
+                        <!-- Frota -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Frota do Vagão/Trator</label>
+                            <input type="text" id="frota" placeholder="Ex: TR-01, VG-05" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto transition-all outline-none">
+                        </div>
+
+                        <!-- Data e Hora -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Data/Hora da Transferência <span class="text-red-500">*</span></label>
+                            <input type="datetime-local" id="dataHora" required class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto transition-all outline-none bg-white">
+                        </div>
+
+                        <!-- Departamento de Origem -->
+                        <div class="relative">
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Departamento de Origem <span class="text-red-500">*</span></label>
+                            <select id="origem-select" required onchange="handleSelectComOpcaoOutro('origem')" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto transition-all outline-none bg-white appearance-none">
+                                <option value="" disabled selected>Selecione a origem...</option>
+                                <option value="Fábrica de Ração">Fábrica de Ração</option>
+                                <option value="Fábrica de Adubo">Fábrica de Adubo</option>
+                                <option value="OUTRO">Outro</option>
+                            </select>
+                            <div class="pointer-events-none absolute inset-y-0 right-0 top-[28px] flex items-center px-4 text-gray-500">
+                                <i class="ph ph-caret-down text-lg"></i>
+                            </div>
+                            <input type="text" id="origem-outro" placeholder="Especifique a origem" class="hidden mt-3 w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto transition-all outline-none">
+                        </div>
+
+                        <!-- Departamento de Destino -->
+                        <div class="relative">
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Departamento de Destino <span class="text-red-500">*</span></label>
+                            <select id="destino-select" required onchange="handleSelectComOpcaoOutro('destino')" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto transition-all outline-none bg-white appearance-none">
+                                <option value="" disabled selected>Selecione o destino...</option>
+                                <option value="Pecuária">Pecuária</option>
+                                <option value="Shaparral">Shaparral</option>
+                                <option value="Graneleiro">Graneleiro</option>
+                                <option value="OUTRO">Outro</option>
+                            </select>
+                            <div class="pointer-events-none absolute inset-y-0 right-0 top-[28px] flex items-center px-4 text-gray-500">
+                                <i class="ph ph-caret-down text-lg"></i>
+                            </div>
+                            <input type="text" id="destino-outro" placeholder="Especifique o destino" class="hidden mt-3 w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto transition-all outline-none">
+                        </div>
+
+                        <!-- Formulado / Material -->
+                        <div class="relative">
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Material Transferido <span class="text-red-500">*</span></label>
+                            <select id="formulado-select" required onchange="handleSelectComOpcaoOutro('formulado')" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto transition-all outline-none bg-white appearance-none">
+                                <option value="" disabled selected>Selecione um material...</option>
+                                <option value="027 - SILAGEM DE BRACHIARIA - ÚNICA">027 - SILAGEM DE BRACHIARIA - ÚNICA</option>
+                                <option value="014 - SILAGEM DE MILHETO - ÚNICA">014 - SILAGEM DE MILHETO - ÚNICA</option>
+                                <option value="61038 - MILHO EM GRAOS ADQUIRIDO TERCEIROS">61038 - MILHO EM GRAOS ADQUIRIDO TERCEIROS</option>
+                                <option value="121004 - DDG S - ÚNICA">121004 - DDG S - ÚNICA</option>
+                                <option value="005 - MILHETO EM GRAOS - ÚNICA">005 - MILHETO EM GRAOS - ÚNICA</option>
+                                <option value="120794 - DDG OURO - ÚNICA">120794 - DDG OURO - ÚNICA</option>
+                                <option value="112844 - NUCLEO MINERAL RUMITECH BEEF 2025 - ÚNICA">112844 - NUCLEO MINERAL RUMITECH BEEF 2025 - ÚNICA</option>
+                                <option value="111357 - NUCLEO MINERAL IMPACTO PRO BAG">111357 - NUCLEO MINERAL IMPACTO PRO BAG</option>
+                                <option value="62563 - SAL BRANCO CIMSAL">62563 - SAL BRANCO CIMSAL</option>
+                                <option value="011 - RESIDUO SOJA - UNICA">011 - RESIDUO SOJA - UNICA</option>
+                                <option value="03261 - UREIA AGRICOLA">03261 - UREIA AGRICOLA</option>
+                                <option value="122818 - RACAO FORMULADA PROTEINADO 2026 _V3 - ÚNICA">122818 - RACAO FORMULADA PROTEINADO 2026 _V3 - ÚNICA</option>
+                                <option value="123778 - RACAO FORMULADA MINERAL UREADO 2026 - ÚNICA">123778 - RACAO FORMULADA MINERAL UREADO 2026 - ÚNICA</option>
+                                <option value="62174 - MINERAL NOVANIS EQUINOS">62174 - MINERAL NOVANIS EQUINOS</option>
+                                <option value="OUTRO">Outro</option>
+                            </select>
+                            <div class="pointer-events-none absolute inset-y-0 right-0 top-[28px] flex items-center px-4 text-gray-500">
+                                <i class="ph ph-caret-down text-lg"></i>
+                            </div>
+                            <input type="text" id="formulado-outro" placeholder="Digite a identificação do material" class="hidden mt-3 w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto transition-all outline-none">
+                        </div>
+
+                        <!-- Peso Estimado -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Peso Estimado</label>
+                            <div class="relative">
+                                <input type="number" step="any" id="pesoEstimado" placeholder="Ex: 5000" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto transition-all outline-none">
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500 font-medium">
+                                    KG
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Peso Real -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Peso Real <span class="text-red-500">*</span></label>
+                            <div class="relative">
+                                <input type="number" step="any" id="pesoReal" required placeholder="Ex: 5120.5" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto transition-all outline-none">
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500 font-medium">
+                                    KG
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Observações -->
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">Observações Adicionais</label>
+                            <textarea id="observacoes" rows="3" placeholder="Informações adicionais sobre o carregamento (opcional)" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto transition-all outline-none resize-none"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Fotos Materiais Upload Zone -->
+                    <div class="mt-8 pt-6 border-t border-gray-100">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Anexo de Fotos dos Ingredientes Utilizados na Fórmula: <span class="text-red-500">*</span></label>
+                        <p class="text-xs text-gray-500 mb-4">Insira <strong class="text-atto">de 1 a 5 fotos</strong> dos materiais utilizados na receita.</p>
+                        
+                        <div id="drop-zone-materiais" class="p-2 border-2 border-dashed border-transparent rounded-xl transition-colors">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <button type="button" onclick="document.getElementById('file-input-camera-materiais').click()" class="border border-gray-300 bg-white hover:bg-green-50 rounded-xl p-5 flex flex-col items-center justify-center text-center transition-colors shadow-sm group focus:ring-2 focus:ring-atto focus:outline-none">
+                                    <div class="bg-green-100 group-hover:bg-green-200 p-3 rounded-full mb-3 text-atto transition-colors ui-icon-container-materiais">
+                                        <i class="ph ph-camera text-2xl ui-icon-materiais"></i>
+                                    </div>
+                                    <span class="font-medium text-gray-800">Tirar Foto</span>
+                                    <span class="text-xs text-gray-500 mt-1">Abre a câmera do celular</span>
+                                </button>
+                                <button type="button" onclick="document.getElementById('file-input-gallery-materiais').click()" class="border border-gray-300 bg-gray-50 hover:bg-gray-100 rounded-xl p-5 flex flex-col items-center justify-center text-center transition-colors shadow-sm group focus:ring-2 focus:ring-atto focus:outline-none">
+                                    <div class="bg-white group-hover:bg-gray-200 p-3 rounded-full mb-3 text-gray-600 transition-colors ui-icon-container-materiais">
+                                        <i class="ph ph-image text-2xl ui-icon-materiais"></i>
+                                    </div>
+                                    <span class="font-medium text-gray-800">Escolher da Galeria</span>
+                                    <span class="text-xs text-gray-500 mt-1">Ou arraste arquivos aqui</span>
+                                </button>
+                            </div>
+                            <input type="file" id="file-input-camera-materiais" accept="image/*" capture="environment" class="hidden" onchange="handleFilesSelection(event, 'materiais')">
+                            <input type="file" id="file-input-gallery-materiais" multiple accept="image/*" class="hidden" onchange="handleFilesSelection(event, 'materiais')">
+                        </div>
+                        <div id="foto-preview-container-materiais" class="mt-4 flex gap-3 overflow-x-auto custom-scrollbar pb-2 min-h-[6rem]"></div>
+                        <div id="foto-validation-msg-materiais" class="text-sm font-medium text-amber-600 mt-2 flex items-center gap-1">
+                            <i class="ph ph-warning-circle"></i> Mínimo de 1 foto
+                        </div>
+                    </div>
+
+                    <!-- Fotos Boxes Upload Zone -->
+                    <div class="mt-8 pt-6 border-t border-gray-100">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Anexo de Foto dos Boxes <span class="text-red-500">*</span></label>
+                        <p class="text-xs text-gray-500 mb-4">Insira <strong class="text-atto">de 1 a 5 fotos</strong> dos boxes de destino.</p>
+                        
+                        <div id="drop-zone-boxes" class="p-2 border-2 border-dashed border-transparent rounded-xl transition-colors">
+                            <!-- A estrutura dos botões é idêntica, apenas os IDs e onchange são diferentes -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <button type="button" onclick="document.getElementById('file-input-camera-boxes').click()" class="border border-gray-300 bg-white hover:bg-green-50 rounded-xl p-5 flex flex-col items-center justify-center text-center transition-colors shadow-sm group focus:ring-2 focus:ring-atto focus:outline-none"><div class="bg-green-100 group-hover:bg-green-200 p-3 rounded-full mb-3 text-atto transition-colors ui-icon-container-boxes"><i class="ph ph-camera text-2xl ui-icon-boxes"></i></div><span class="font-medium text-gray-800">Tirar Foto</span><span class="text-xs text-gray-500 mt-1">Abre a câmera do celular</span></button>
+                                <button type="button" onclick="document.getElementById('file-input-gallery-boxes').click()" class="border border-gray-300 bg-gray-50 hover:bg-gray-100 rounded-xl p-5 flex flex-col items-center justify-center text-center transition-colors shadow-sm group focus:ring-2 focus:ring-atto focus:outline-none"><div class="bg-white group-hover:bg-gray-200 p-3 rounded-full mb-3 text-gray-600 transition-colors ui-icon-container-boxes"><i class="ph ph-image text-2xl ui-icon-boxes"></i></div><span class="font-medium text-gray-800">Escolher da Galeria</span><span class="text-xs text-gray-500 mt-1">Ou arraste arquivos aqui</span></button>
+                            </div>
+                            <input type="file" id="file-input-camera-boxes" accept="image/*" capture="environment" class="hidden" onchange="handleFilesSelection(event, 'boxes')">
+                            <input type="file" id="file-input-gallery-boxes" multiple accept="image/*" class="hidden" onchange="handleFilesSelection(event, 'boxes')">
+                        </div>
+                        <div id="foto-preview-container-boxes" class="mt-4 flex gap-3 overflow-x-auto custom-scrollbar pb-2 min-h-[6rem]"></div>
+                        <div id="foto-validation-msg-boxes" class="text-sm font-medium text-amber-600 mt-2 flex items-center gap-1">
+                            <i class="ph ph-warning-circle"></i> Mínimo de 1 foto
+                        </div>
+                    </div>
+
+                    <!-- Fotos Pesagem Upload Zone -->
+                    <div class="mt-8 pt-6 border-t border-gray-100">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Anexo de Fotos da Pesagem <span class="text-red-500">*</span></label>
+                        <p class="text-xs text-gray-500 mb-4">Insira fotos do <strong class="text-atto">caminhão vazio</strong>, <strong class="text-atto">balança zerada</strong> e <strong class="text-atto">balança com peso</strong>.</p>
+                        
+                        <div id="drop-zone-pesagem" class="p-2 border-2 border-dashed border-transparent rounded-xl transition-colors">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <button type="button" onclick="document.getElementById('file-input-camera-pesagem').click()" class="border border-gray-300 bg-white hover:bg-green-50 rounded-xl p-5 flex flex-col items-center justify-center text-center transition-colors shadow-sm group focus:ring-2 focus:ring-atto focus:outline-none"><div class="bg-green-100 group-hover:bg-green-200 p-3 rounded-full mb-3 text-atto transition-colors ui-icon-container-pesagem"><i class="ph ph-camera text-2xl ui-icon-pesagem"></i></div><span class="font-medium text-gray-800">Tirar Foto</span><span class="text-xs text-gray-500 mt-1">Abre a câmera do celular</span></button>
+                                <button type="button" onclick="document.getElementById('file-input-gallery-pesagem').click()" class="border border-gray-300 bg-gray-50 hover:bg-gray-100 rounded-xl p-5 flex flex-col items-center justify-center text-center transition-colors shadow-sm group focus:ring-2 focus:ring-atto focus:outline-none"><div class="bg-white group-hover:bg-gray-200 p-3 rounded-full mb-3 text-gray-600 transition-colors ui-icon-container-pesagem"><i class="ph ph-image text-2xl ui-icon-pesagem"></i></div><span class="font-medium text-gray-800">Escolher da Galeria</span><span class="text-xs text-gray-500 mt-1">Ou arraste arquivos aqui</span></button>
+                            </div>
+                            <input type="file" id="file-input-camera-pesagem" accept="image/*" capture="environment" class="hidden" onchange="handleFilesSelection(event, 'pesagem')">
+                            <input type="file" id="file-input-gallery-pesagem" multiple accept="image/*" class="hidden" onchange="handleFilesSelection(event, 'pesagem')">
+                        </div>
+                        <div id="foto-preview-container-pesagem" class="mt-4 flex gap-3 overflow-x-auto custom-scrollbar pb-2 min-h-[6rem]"></div>
+                        <div id="foto-validation-msg-pesagem" class="text-sm font-medium text-amber-600 mt-2 flex items-center gap-1">
+                            <i class="ph ph-warning-circle"></i> Mínimo de 1 foto
+                        </div>
+                    </div>
+
+                    <!-- Fotos Upload Zone -->
+                    <div class="mt-8 pt-6 border-t border-gray-100">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Anexo de Foto do Transporte carregado <span class="text-red-500">*</span></label>
+                        <p class="text-xs text-gray-500 mb-4">Insira <strong class="text-atto">de 1 a 5 fotos</strong> mostrando o aspecto geral da carga.</p>
+                        
+                        <div id="drop-zone" class="p-2 border-2 border-dashed border-transparent rounded-xl transition-colors">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <button type="button" onclick="document.getElementById('file-input-camera').click()" class="border border-gray-300 bg-white hover:bg-green-50 rounded-xl p-5 flex flex-col items-center justify-center text-center transition-colors shadow-sm group focus:ring-2 focus:ring-atto focus:outline-none"><div class="bg-green-100 group-hover:bg-green-200 p-3 rounded-full mb-3 text-atto transition-colors ui-icon-container"><i class="ph ph-camera text-2xl ui-icon"></i></div><span class="font-medium text-gray-800">Tirar Foto</span><span class="text-xs text-gray-500 mt-1">Abre a câmera do celular</span></button>
+                                <button type="button" onclick="document.getElementById('file-input-gallery').click()" class="border border-gray-300 bg-gray-50 hover:bg-gray-100 rounded-xl p-5 flex flex-col items-center justify-center text-center transition-colors shadow-sm group focus:ring-2 focus:ring-atto focus:outline-none"><div class="bg-white group-hover:bg-gray-200 p-3 rounded-full mb-3 text-gray-600 transition-colors ui-icon-container"><i class="ph ph-image text-2xl ui-icon"></i></div><span class="font-medium text-gray-800">Escolher da Galeria</span><span class="text-xs text-gray-500 mt-1">Ou arraste arquivos aqui</span></button>
+                            </div>
+                            <input type="file" id="file-input-camera" accept="image/*" capture="environment" class="hidden" onchange="handleFilesSelection(event)">
+                            <input type="file" id="file-input-gallery" multiple accept="image/*" class="hidden" onchange="handleFilesSelection(event)">
+                        </div>
+                        <div id="foto-preview-container" class="mt-4 flex gap-3 overflow-x-auto custom-scrollbar pb-2 min-h-[6rem]"></div>
+                        <div id="foto-validation-msg" class="text-sm font-medium text-amber-600 mt-2 flex items-center gap-1">
+                            <i class="ph ph-warning-circle"></i> Mínimo de 1 foto
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="pt-6">
+                        <button type="submit" id="submit-btn" class="w-full bg-atto hover:bg-atto-dark text-white font-bold py-3.5 px-6 rounded-xl transition-colors shadow-lg shadow-green-600/30 flex items-center justify-center gap-2 text-lg">
+                            <i class="ph ph-paper-plane-right"></i>
+                            Registrar Expedição
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- TAB 2: ADMIN -->
+        <section id="tab-admin" class="tab-content">
+            
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                        <i class="ph ph-list-dashes text-atto"></i>
+                        Painel de Administração
+                    </h2>
+                    <p class="text-gray-500 text-sm mt-1">Monitoramento em tempo real das cargas expedidas pelo estoque.</p>
+                </div>
+                <div class="bg-blue-50 text-blue-700 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 border border-blue-100">
+                    <div class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+                    Sincronizado ao Vivo
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div id="admin-empty-state" class="hidden flex-col items-center justify-center py-16 text-center">
+                <div class="bg-gray-100 p-4 rounded-full mb-4">
+                    <i class="ph ph-file-dashed text-4xl text-gray-400"></i>
+                </div>
+                <h3 class="text-lg font-bold text-gray-700">Nenhuma expedição registrada</h3>
+                <p class="text-gray-500 mt-1 max-w-sm">As cargas registradas no formulário aparecerão aqui automaticamente.</p>
+            </div>
+
+            <!-- Grid -->
+            <div id="admin-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Cards populados via JS -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MODALS -->
+
+    <!-- Alert Modal (replaces alert()) -->
+    <div id="alert-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center transform scale-95 transition-transform duration-300" id="alert-modal-content">
+            <div id="alert-icon" class="mx-auto mb-4 w-16 h-16 flex items-center justify-center rounded-full bg-green-100 text-green-600 text-3xl">
+                <i class="ph ph-check-circle"></i>
+            </div>
+            <h3 id="alert-title" class="text-xl font-bold text-gray-900 mb-2">Sucesso!</h3>
+            <p id="alert-message" class="text-gray-600 mb-8 text-sm">Operação realizada com sucesso.</p>
+            <button onclick="closeAlert()" id="alert-btn" class="w-full bg-atto hover:bg-atto-dark text-white font-semibold py-3 px-4 rounded-xl transition-colors">
+                Entendido
+            </button>
+        </div>
+    </div>
+
+    <!-- Confirm Modal (replaces confirm()) -->
+    <div id="confirm-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 transform scale-95 transition-transform duration-300" id="confirm-modal-content">
+            <h3 class="text-xl font-bold text-gray-900 mb-2 flex items-center gap-2">
+                <i class="ph-fill ph-warning-circle text-red-500"></i>
+                Confirmar Exclusão
+            </h3>
+            <p class="text-gray-600 mb-8 text-sm">Tem certeza que deseja apagar este registro de expedição? Todos os dados e fotos vinculados serão removidos permanentemente.</p>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeConfirm()" class="px-5 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl font-medium transition-colors">Cancelar</button>
+                <button id="confirm-action-btn" class="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-600/20 rounded-xl font-medium transition-colors">Sim, Excluir</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Download Confirm Modal -->
+    <div id="download-confirm-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 transform scale-95 transition-transform duration-300" id="download-confirm-modal-content">
+            <div class="mx-auto mb-4 w-16 h-16 flex items-center justify-center rounded-full bg-green-100 text-green-600 text-3xl"><i class="ph ph-check-circle"></i></div>
+            <h3 class="text-xl font-bold text-gray-900 mb-2">Transferência Registrada!</h3>
+            <p class="text-gray-600 mb-8 text-sm">Deseja salvar uma cópia do apontamento em PDF no seu dispositivo?</p>
+            <div class="flex flex-col sm:flex-row gap-3">
+                <button id="download-confirm-no-btn" class="w-full px-5 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl font-medium transition-colors">Não, obrigado</button>
+                <button id="download-confirm-yes-btn" class="w-full px-5 py-2.5 bg-atto hover:bg-atto-dark text-white shadow-lg shadow-green-600/20 rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
+                    <i class="ph ph-download-simple"></i> Sim, Salvar Cópia</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Photo Viewer Modal -->
+    <div id="photo-modal" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-black/95 p-4 opacity-0 transition-opacity duration-300">
+        <button onclick="closePhotoViewer()" class="absolute top-4 right-4 text-white hover:text-red-400 text-4xl p-2 bg-black/50 rounded-full transition-colors z-10">
+            <i class="ph ph-x"></i>
+        </button>
+        <img id="photo-modal-img" src="" class="max-w-full max-h-full object-contain rounded-lg shadow-2xl transform scale-95 transition-transform duration-300">
+    </div>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-gray-900/70 backdrop-blur-sm p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform scale-95 transition-transform duration-300" id="login-modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+                    <i class="ph-fill ph-shield-check text-atto"></i>
+                    Autenticação Necessária
+                </h3>
+            </div>
+            <p class="text-gray-600 mb-4 text-sm">Faça login com seu e-mail e senha para acessar o sistema de expedição.</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">E-mail</label>
+                    <input id="login-email" type="email" placeholder="seu.email@empresa.com" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Senha</label>
+                    <input id="login-password" type="password" placeholder="Digite sua senha" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto outline-none" onkeypress="if(event.key === 'Enter') submitLogin()">
+                </div>
+                <p id="login-error" class="hidden text-red-500 text-sm font-medium"><i class="ph ph-warning-circle"></i> E-mail ou senha inválidos.</p>
+                <button onclick="submitLogin()" class="w-full bg-atto hover:bg-atto-dark text-white font-semibold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
+                    Entrar
+                    <i class="ph ph-arrow-right"></i>
+                </button>
+                <button onclick="createAccount()" class="w-full mt-3 border border-atto text-atto font-semibold py-3 px-4 rounded-xl transition-colors hover:bg-atto/10 flex items-center justify-center gap-2">
+                    Criar nova conta
+                    <i class="ph ph-user-plus"></i>
+                </button>
+                <button onclick="signInWithGoogle()" class="w-full mt-3 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
+                    <i class="ph ph-google text-xl"></i>
+                    Entrar com Google
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Modal -->
+    <div id="share-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 transform scale-95 transition-transform duration-300" id="share-modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+                    <i class="ph-fill ph-share-network text-atto"></i>
+                    Compartilhar Comprovante
+                </h3>
+                <button onclick="closeShareModal()" class="text-gray-400 hover:text-gray-600 transition-colors"><i class="ph ph-x text-xl"></i></button>
+            </div>
+            <p class="text-gray-600 mb-6 text-sm">O PDF será baixado no seu dispositivo. Em seguida, escolha como deseja compartilhar.</p>
+            <div class="flex flex-col gap-3">
+                <button id="share-whatsapp-btn" class="w-full px-5 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2"><i class="ph-fill ph-whatsapp-logo text-xl"></i> Enviar por WhatsApp</button>
+                <button id="share-email-btn" class="w-full px-5 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2"><i class="ph-fill ph-envelope-simple text-xl"></i> Enviar por E-mail</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Password Modal -->
+    <div id="password-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 transform scale-95 transition-transform duration-300" id="password-modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+                    <i class="ph-fill ph-lock-key text-atto"></i>
+                    Acesso Restrito
+                </h3>
+                <button onclick="closePasswordModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <i class="ph ph-x text-xl"></i>
+                </button>
+            </div>
+            <p class="text-gray-600 mb-4 text-sm">Digite a senha de administrador para acessar o painel de controle e gerenciar as expedições.</p>
+            
+            <div class="mb-5">
+                <input type="password" id="admin-password" placeholder="Digite a senha..." class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-atto focus:border-atto transition-all outline-none" onkeypress="if(event.key === 'Enter') submitPassword()">
+                <p id="password-error" class="hidden text-red-500 text-xs mt-2 font-medium"><i class="ph ph-warning-circle"></i> Senha incorreta.</p>
+            </div>
+            
+            <button onclick="submitPassword()" class="w-full bg-atto hover:bg-atto-dark text-white font-semibold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
+                Desbloquear
+                <i class="ph ph-arrow-right"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Hidden structure for PDF generation -->
+    <div id="pdf-receipt-container" class="fixed -left-[9999px] top-0 p-8 bg-white text-gray-800" style="width: 800px;">
+        <div id="pdf-receipt-header" class="flex items-center justify-between pb-4 border-b border-gray-200">
+            <div class="flex items-center gap-3">
+                <div class="bg-atto text-white p-2 rounded-lg">
+                    <i class="ph-fill ph-plant text-3xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold leading-tight">ATTO Sementes</h1>
+                    <p class="text-sm text-gray-500 uppercase tracking-wider font-semibold">Comprovante de Transferência</p>
+                </div>
+            </div>
+            <div id="pdf-receipt-timestamp" class="text-right text-xs text-gray-500"></div>
+        </div>
+        <div id="pdf-receipt-body" class="py-6">
+            <!-- Content will be injected by JS -->
+        </div>
+        <div id="pdf-receipt-photos" class="pt-6 border-t border-gray-200">
+            <!-- Photos will be injected by JS -->
+        </div>
+        <div id="pdf-receipt-footer" class="pt-4 mt-6 border-t border-gray-200 text-center text-xs text-gray-400">
+            Documento gerado via Sistema de Expedição Interno.
+        </div>
+    </div>
+
+    <!-- LOGIC (Firebase & App) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, GoogleAuthProvider, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, collection, addDoc, deleteDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // ATENÇÃO: Substitua os valores abaixo pelas suas chaves reais do Firebase!
+        const firebaseConfig = {
+            apiKey: "AIzaSyBe-R_7RcO4q34u9jrR4SXoOtfTppQ25FA",
+            authDomain: "integracaocoi.firebaseapp.com",
+            projectId: "integracaocoi",
+            storageBucket: "integracaocoi.firebasestorage.app",
+            messagingSenderId: "177203745489",
+            appId: "1:177203745489:web:f5ca473ac534d548032bf0",
+            measurementId: "G-TZXZX22T9X"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        let currentUser = null;
+        let pendingLoginResolver = null;
+
+        // Coleção compartilhada para todos os usuários
+        function getExpedicoesCollection() {
+            return collection(db, 'expedicoes_geral');
+        }
+
+        function getExpedicaoDoc(documentId) {
+            return doc(db, 'expedicoes_geral', documentId);
+        }
+
+        // Initialize Authentication before any DB ops
+        function initAuth() {
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                        currentUser = user;
+                        document.getElementById('initial-loader').style.display = 'none';
+                        closeLoginModal();
+                        // show user in header
+                        try {
+                            const userInfoEl = document.getElementById('user-info');
+                            const signoutBtn = document.getElementById('signout-btn');
+                            if (userInfoEl) userInfoEl.innerText = user.email || user.uid;
+                            if (signoutBtn) signoutBtn.classList.remove('hidden');
+                        } catch (e) {}
+                        loadAdminData();
+                    } else {
+                        document.getElementById('initial-loader').style.display = 'none';
+                        // hide header user info
+                        try {
+                            const userInfoEl = document.getElementById('user-info');
+                            const signoutBtn = document.getElementById('signout-btn');
+                            if (userInfoEl) userInfoEl.innerText = '';
+                            if (signoutBtn) signoutBtn.classList.add('hidden');
+                        } catch (e) {}
+                        showLoginModal();
+                    }
+            });
+
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                signInWithCustomToken(auth, __initial_auth_token).catch(error => {
+                    console.error("Erro na autenticação customizada Firebase:", error);
+                    showAlert('error', 'Falha na Autenticação', 'O token customizado fornecido é inválido ou expirou.');
+                    showLoginModal();
+                });
+            }
+        }
+
+        // State Variables
+        let selectedPhotos = [];
+        let selectedMaterialPhotos = [];
+        let selectedBoxPhotos = [];
+        let selectedPesagemPhotos = [];
+        let confirmActionCallback = null;
+        let shareData = null;
+        let isAdminAutenticado = false;
+        const ADMIN_PASSWORDS = ["ATTO2026", "2026"];
+        const SENHA_ADMINISTRADOR = ADMIN_PASSWORDS[0]; // Mude esta senha conforme necessário
+
+        // Expose functions to window for HTML event handlers
+        window.switchTab = switchTab;
+        window.handleFilesSelection = handleFilesSelection;
+        window.removePhoto = removePhoto;
+        window.submitExpedicao = submitExpedicao;
+        window.handleSelectComOpcaoOutro = handleSelectComOpcaoOutro;
+        window.closeAlert = closeAlert;
+        window.closeConfirm = closeConfirm;
+        window.deleteExpedicaoPrompt = deleteExpedicaoPrompt;
+        window.openPhotoViewer = openPhotoViewer;
+        window.closePhotoViewer = closePhotoViewer;
+        window.verificarAcessoAdmin = verificarAcessoAdmin;
+        window.closePasswordModal = closePasswordModal;
+        window.submitPassword = submitPassword;
+        window.submitLogin = submitLogin;
+        window.createAccount = createAccount;
+        window.signInWithGoogle = signInWithGoogle;
+        window.signOutUser = signOutUser;
+        window.shareExpedicaoPrompt = shareExpedicaoPrompt;
+        window.closeShareModal = closeShareModal;
+        window.closeLoginModal = closeLoginModal;
+
+        // UI Helpers
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+            document.getElementById(`nav-${tabId}`).classList.add('active');
+        }
+
+        function setDefaultDateTime() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('dataHora').value = now.toISOString().slice(0,16);
+        }
+
+        // Generic logic for selects with an "Other" option
+        function handleSelectComOpcaoOutro(prefix) {
+            const select = document.getElementById(`${prefix}-select`);
+            const outroInput = document.getElementById(`${prefix}-outro`);
+            
+            if (select.value === 'OUTRO') {
+                outroInput.classList.remove('hidden');
+                outroInput.setAttribute('required', 'true');
+                outroInput.focus();
+            } else {
+                outroInput.classList.add('hidden');
+                outroInput.removeAttribute('required');
+                outroInput.value = '';
+            }
+        }
+
+        // Custom Modals
+        function showAlert(type, title, message) {
+            const modal = document.getElementById('alert-modal');
+            const content = document.getElementById('alert-modal-content');
+            const icon = document.getElementById('alert-icon');
+            const btn = document.getElementById('alert-btn');
+            
+            document.getElementById('alert-title').innerText = title;
+            document.getElementById('alert-message').innerText = message;
+            
+            if (type === 'error') {
+                icon.className = 'mx-auto mb-4 w-16 h-16 flex items-center justify-center rounded-full bg-red-100 text-red-600 text-3xl';
+                icon.innerHTML = '<i class="ph ph-x-circle"></i>';
+                btn.className = 'w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-xl transition-colors';
+            } else {
+                icon.className = 'mx-auto mb-4 w-16 h-16 flex items-center justify-center rounded-full bg-green-100 text-green-600 text-3xl';
+                icon.innerHTML = '<i class="ph ph-check-circle"></i>';
+                btn.className = 'w-full bg-atto hover:bg-atto-dark text-white font-semibold py-3 px-4 rounded-xl transition-colors';
+            }
+
+            modal.classList.remove('hidden');
+            // Allow display block to apply before animating opacity
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeAlert() {
+            const modal = document.getElementById('alert-modal');
+            const content = document.getElementById('alert-modal-content');
+            modal.classList.add('opacity-0');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        function showConfirm(callback) {
+            confirmActionCallback = callback;
+            const modal = document.getElementById('confirm-modal');
+            const content = document.getElementById('confirm-modal-content');
+            
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function showLoginModal() {
+            const modal = document.getElementById('login-modal');
+            const content = document.getElementById('login-modal-content');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeLoginModal() {
+            const modal = document.getElementById('login-modal');
+            const content = document.getElementById('login-modal-content');
+            modal.classList.add('opacity-0');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        async function submitLogin() {
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value;
+            const errorEl = document.getElementById('login-error');
+
+            if (!email || !password) {
+                errorEl.textContent = 'E-mail e senha são obrigatórios.';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            errorEl.classList.add('hidden');
+            try {
+                const cred = await signInWithEmailAndPassword(auth, email, password);
+                currentUser = cred.user;
+                closeLoginModal();
+                loadAdminData();
+            } catch (error) {
+                console.error('Erro no login:', error);
+                let msg = 'E-mail ou senha inválidos. Verifique suas credenciais.';
+                if (error && error.code) {
+                    switch (error.code) {
+                        case 'auth/user-not-found': msg = 'Usuário não encontrado.'; break;
+                        case 'auth/wrong-password': msg = 'Senha incorreta.'; break;
+                        case 'auth/invalid-email': msg = 'E-mail com formato inválido.'; break;
+                        case 'auth/user-disabled': msg = 'Conta desabilitada. Contate o administrador.'; break;
+                    }
+                }
+                errorEl.textContent = msg;
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        async function createAccount() {
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value;
+            const errorEl = document.getElementById('login-error');
+
+            if (!email || !password) {
+                errorEl.textContent = 'E-mail e senha são obrigatórios para criar uma conta.';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            errorEl.classList.add('hidden');
+            try {
+                const cred = await createUserWithEmailAndPassword(auth, email, password);
+                currentUser = cred.user;
+                closeLoginModal();
+                loadAdminData();
+            } catch (error) {
+                console.error('Erro ao criar conta:', error);
+                let msg = 'Não foi possível criar a conta. Verifique o e-mail e tente novamente.';
+                if (error && error.code) {
+                    switch (error.code) {
+                        case 'auth/email-already-in-use': msg = 'E-mail já está em uso.'; break;
+                        case 'auth/weak-password': msg = 'Senha fraca. Use pelo menos 6 caracteres.'; break;
+                        case 'auth/invalid-email': msg = 'E-mail com formato inválido.'; break;
+                    }
+                }
+                errorEl.textContent = msg;
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        async function signInWithGoogle() {
+            const errorEl = document.getElementById('login-error');
+            errorEl.classList.add('hidden');
+
+            try {
+                const provider = new GoogleAuthProvider();
+                const cred = await signInWithPopup(auth, provider);
+                currentUser = cred.user;
+                closeLoginModal();
+                loadAdminData();
+            } catch (error) {
+                console.error('Erro no login com Google:', error);
+                // If popup is blocked or cancelled, fallback to redirect
+                if (error && (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request' || error.code === 'auth/popup-closed-by-user')) {
+                    try {
+                        const provider = new GoogleAuthProvider();
+                        await signInWithRedirect(auth, provider);
+                        return; // redirect flow will continue after redirect
+                    } catch (redirErr) {
+                        console.error('Redirect fallback failed:', redirErr);
+                    }
+                }
+
+                // Domain not authorized message
+                if (error && (error.code === 'auth/operation-not-allowed' || (error.message && error.message.includes('authorized for OAuth operations')))) {
+                    errorEl.textContent = 'Domínio não autorizado para OAuth. Adicione este domínio em Firebase Console → Authentication → Settings → Authorized domains.';
+                } else {
+                    errorEl.textContent = error.message || 'Falha no login com Google. Verifique pop-ups e tente novamente.';
+                }
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        async function signOutUser() {
+            try {
+                await signOut(auth);
+                currentUser = null;
+                const userInfoEl = document.getElementById('user-info');
+                const signoutBtn = document.getElementById('signout-btn');
+                if (userInfoEl) userInfoEl.innerText = '';
+                if (signoutBtn) signoutBtn.classList.add('hidden');
+                showLoginModal();
+            } catch (err) {
+                console.error('Erro ao sair:', err);
+                showAlert('error', 'Erro', 'Falha ao sair. Tente novamente.');
+            }
+        }
+
+        function closeConfirm() {
+            const modal = document.getElementById('confirm-modal');
+            const content = document.getElementById('confirm-modal-content');
+            modal.classList.add('opacity-0');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                confirmActionCallback = null;
+            }, 300);
+        }
+
+        document.getElementById('confirm-action-btn').addEventListener('click', () => {
+            if (confirmActionCallback) {
+                confirmActionCallback();
+                closeConfirm();
+            }
+        });
+
+        // Share Modal
+        function shareExpedicaoPrompt(data) {
+            shareData = data;
+            const modal = document.getElementById('share-modal');
+            const content = document.getElementById('share-modal-content');
+            
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeShareModal() {
+            const modal = document.getElementById('share-modal');
+            const content = document.getElementById('share-modal-content');
+            modal.classList.add('opacity-0');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                shareData = null;
+            }, 300);
+        }
+
+        document.getElementById('share-whatsapp-btn').addEventListener('click', async () => {
+            await generateAndDownloadPDF(shareData);
+            const message = `Olá! Segue o comprovante de transferência para o material ${shareData.material} (Peso: ${shareData.pesoReal} KG). O arquivo PDF foi baixado no seu dispositivo para anexo.`;
+            window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+        });
+        document.getElementById('share-email-btn').addEventListener('click', async () => {
+            await generateAndDownloadPDF(shareData);
+            const subject = `Comprovante de Transferência: ${shareData.material}`;
+            const body = `Olá,\n\nSegue em anexo o comprovante de transferência referente à expedição do material ${shareData.material} (Peso: ${shareData.pesoReal} KG), realizada em ${formatDateBR(shareData.dataHora)}.\n\nO arquivo PDF foi baixado no seu dispositivo para ser anexado a este e-mail.\n\nAtenciosamente.`;
+            window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+        });
+
+        // Photo Viewer Modal
+        function openPhotoViewer(src) {
+            const modal = document.getElementById('photo-modal');
+            const img = document.getElementById('photo-modal-img');
+            img.src = src;
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                img.classList.remove('scale-95');
+                img.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closePhotoViewer() {
+            const modal = document.getElementById('photo-modal');
+            const img = document.getElementById('photo-modal-img');
+            modal.classList.add('opacity-0');
+            img.classList.remove('scale-100');
+            img.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        // Admin Access Logic
+        function verificarAcessoAdmin() {
+            if (isAdminAutenticado) {
+                switchTab('admin');
+            } else {
+                const modal = document.getElementById('password-modal');
+                const content = document.getElementById('password-modal-content');
+                document.getElementById('admin-password').value = '';
+                document.getElementById('password-error').classList.add('hidden');
+                
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modal.classList.remove('opacity-0');
+                    content.classList.remove('scale-95');
+                    content.classList.add('scale-100');
+                    document.getElementById('admin-password').focus();
+                }, 10);
+            }
+        }
+
+        function closePasswordModal() {
+            const modal = document.getElementById('password-modal');
+            const content = document.getElementById('password-modal-content');
+            modal.classList.add('opacity-0');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        function submitPassword() {
+            const input = document.getElementById('admin-password');
+            const errorMsg = document.getElementById('password-error');
+            const trimmed = input.value.trim();
+            
+            if (ADMIN_PASSWORDS.includes(trimmed)) {
+                isAdminAutenticado = true;
+                closePasswordModal();
+                setTimeout(() => {
+                    switchTab('admin');
+                }, 300);
+            } else {
+                errorMsg.classList.remove('hidden');
+                input.classList.add('border-red-500', 'focus:ring-red-500');
+                
+                // Remove visual error after a moment
+                setTimeout(() => {
+                    input.classList.remove('border-red-500', 'focus:ring-red-500');
+                }, 2000);
+            }
+        }
+
+        // Drag and Drop Logic
+        function setupDragAndDrop(type) {
+            const dropZone = document.getElementById(`drop-zone${type === 'transporte' ? '' : '-' + type}`);
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('border-atto', 'bg-green-50');
+            });
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('border-atto', 'bg-green-50');
+            });
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-atto', 'bg-green-50');
+                if (e.dataTransfer.files.length > 0) {
+                    processFiles(e.dataTransfer.files, type);
+                }
+            });
+        }
+
+        async function handleFilesSelection(event, type = 'transporte') {
+            if (event.target.files.length > 0) {
+                await processFiles(event.target.files, type);
+                event.target.value = ''; // Reset input so same file can be selected again
+            }
+        }
+
+        // Function to compress image using Canvas to stay well within 1MB Firestore limit
+        function compressImage(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        // Maximum dimensions for thumbnail/compression
+                        const MAX_WIDTH = 800; 
+                        const MAX_HEIGHT = 800;
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > height) {
+                            if (width > MAX_WIDTH) {
+                                height *= MAX_WIDTH / width;
+                                width = MAX_WIDTH;
+                            }
+                        } else {
+                            if (height > MAX_HEIGHT) {
+                                width *= MAX_HEIGHT / height;
+                                height = MAX_HEIGHT;
+                            }
+                        }
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        // Compress to JPEG with 0.6 quality (results in small size, approx 30-60kb)
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+                        resolve(dataUrl);
+                    };
+                    img.onerror = () => reject(new Error("Erro ao carregar imagem"));
+                };
+                reader.onerror = () => reject(new Error("Erro ao ler arquivo"));
+            });
+        }
+
+        async function processFiles(files, type = 'transporte') {
+            // Anima todos os ícones para mostrar carregamento
+            const icons = document.querySelectorAll(`.ui-icon-${type}`);
+            icons.forEach(icon => {
+                icon.dataset.originalClass = icon.className;
+                icon.className = `ph ph-spinner animate-spin text-2xl ui-icon-${type}`;
+            });
+
+            let targetArray;
+            if (type === 'materiais') {
+                targetArray = selectedMaterialPhotos;
+            } else if (type === 'boxes') {
+                targetArray = selectedBoxPhotos;
+            } else if (type === 'pesagem') {
+                targetArray = selectedPesagemPhotos;
+            } else {
+                targetArray = selectedPhotos;
+            }
+
+
+            for (let file of files) {
+                if (targetArray.length >= 5) {
+                    showAlert('error', 'Limite Excedido', 'Você pode anexar no máximo 5 fotos.');
+                    break;
+                }
+
+                if (!file.type.startsWith('image/')) {
+                    showAlert('error', 'Arquivo Inválido', `O arquivo "${file.name}" não é uma imagem válida.`);
+                    continue;
+                }
+                
+                try {
+                    const compressedBase64 = await compressImage(file);
+                    targetArray.push({ src: compressedBase64, description: '' });
+                } catch (error) {
+                    console.error("Image compression error:", error);
+                    showAlert('error', 'Erro na Imagem', 'Falha ao processar uma das imagens.');
+                }
+            }
+
+            // Restaura os ícones ao final do carregamento
+            icons.forEach(icon => {
+                if(icon.dataset.originalClass) {
+                    icon.className = icon.dataset.originalClass;
+                }
+            });
+            
+            renderPreviews(type);
+        }
+
+        function renderPreviews(type = 'transporte') {
+            let targetArray;
+            if (type === 'materiais') {
+                targetArray = selectedMaterialPhotos;
+            } else if (type === 'boxes') {
+                targetArray = selectedBoxPhotos;
+            } else if (type === 'pesagem') {
+                targetArray = selectedPesagemPhotos;
+            } else {
+                targetArray = selectedPhotos;
+            }
+
+            const container = document.getElementById(`foto-preview-container${type === 'transporte' ? '' : '-' + type}`);
+            container.innerHTML = '';
+            
+            targetArray.forEach((photo, index) => {
+                const div = document.createElement('div');
+                div.className = 'relative group w-32 flex-shrink-0';
+                div.innerHTML = `
+                    <div class="w-32 h-32 rounded-lg overflow-hidden border border-gray-200 bg-gray-100 shadow-sm">
+                        <img src="${photo.src}" class="w-full h-full object-cover cursor-pointer" onclick="openPhotoViewer('${photo.src}')" title="Clique para ampliar">
+                    </div>
+                    <input type="text" value="${photo.description}" oninput="updatePhotoDescription(${index}, '${type}', this.value)" placeholder="Descrição..." class="mt-1.5 w-full text-xs px-2 py-1 rounded border border-gray-300 focus:ring-1 focus:ring-atto focus:border-atto outline-none">
+                    <div class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button type="button" onclick="removePhoto(${index}, '${type}')" class="text-white hover:bg-red-700 bg-red-600 p-1 rounded-full shadow-md transition-colors" title="Remover">
+                            <i class="ph ph-x text-sm leading-none"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+
+            const validationMsg = document.getElementById(`foto-validation-msg${type === 'transporte' ? '' : '-' + type}`);
+            if (targetArray.length >= 1) {
+                validationMsg.className = 'text-sm font-medium text-green-600 mt-2 flex items-center gap-1';
+                validationMsg.innerHTML = '<i class="ph-fill ph-check-circle"></i> Fotos adicionadas (' + targetArray.length + '/5)';
+            } else {
+                validationMsg.className = 'text-sm font-medium text-amber-600 mt-2 flex items-center gap-1';
+                validationMsg.innerHTML = `<i class="ph-fill ph-warning-circle"></i> Mínimo de 1 foto`;
+            }
+        }
+
+        function updatePhotoDescription(index, type, value) {
+            let targetArray;
+            if (type === 'materiais') targetArray = selectedMaterialPhotos;
+            else if (type === 'boxes') targetArray = selectedBoxPhotos;
+            else if (type === 'pesagem') targetArray = selectedPesagemPhotos;
+            else targetArray = selectedPhotos;
+
+            if (targetArray[index]) {
+                targetArray[index].description = value;
+            }
+        }
+
+        function removePhoto(index, type = 'transporte') {
+            let targetArray;
+            if (type === 'materiais') {
+                targetArray = selectedMaterialPhotos;
+            } else if (type === 'boxes') {
+                targetArray = selectedBoxPhotos;
+            } else if (type === 'pesagem') {
+                targetArray = selectedPesagemPhotos;
+            } else {
+                targetArray = selectedPhotos;
+            }
+
+            targetArray.splice(index, 1);
+            renderPreviews(type);
+        }
+
+        async function submitExpedicao(e) {
+            e.preventDefault();
+            
+            if (!currentUser) {
+                showAlert('error', 'Sem Permissão', 'Você precisa estar autenticado para registrar.');
+                return;
+            }
+
+            if (selectedPhotos.length < 1 ) {
+                showAlert('error', 'Atenção', 'É necessário anexar pelo menos 1 foto do transporte carregado.');
+                return;
+            }
+
+            if (selectedMaterialPhotos.length < 1) {
+                showAlert('error', 'Atenção', 'É necessário anexar pelo menos 1 foto dos materiais.');
+                return;
+            }
+
+            if (selectedBoxPhotos.length < 1) {
+                showAlert('error', 'Atenção', 'É necessário anexar pelo menos 1 foto dos boxes.');
+                return;
+            }
+
+            if (selectedPesagemPhotos.length < 1) {
+                showAlert('error', 'Atenção', 'É necessário anexar pelo menos 1 foto da pesagem.');
+                return;
+            }
+
+            const submitBtn = document.getElementById('submit-btn');
+            const originalBtnContent = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="ph ph-spinner animate-spin text-xl"></i> Registrando...';
+            submitBtn.disabled = true;
+            submitBtn.classList.add('opacity-75');
+
+            try {
+                const selectMaterial = document.getElementById('formulado-select').value;
+                const materialFinal = selectMaterial === 'OUTRO' 
+                    ? document.getElementById('formulado-outro').value.trim() 
+                    : selectMaterial;
+                    
+                const selectOrigem = document.getElementById('origem-select').value;
+                const origemFinal = selectOrigem === 'OUTRO' 
+                    ? document.getElementById('origem-outro').value.trim() 
+                    : selectOrigem;
+                    
+                const selectDestino = document.getElementById('destino-select').value;
+                const destinoFinal = selectDestino === 'OUTRO' 
+                    ? document.getElementById('destino-outro').value.trim() 
+                    : selectDestino;
+
+                const expedicaoData = {
+                    responsavel: document.getElementById('responsavel').value.trim(),
+                    frota: document.getElementById('frota').value.trim(),
+                    dataHora: document.getElementById('dataHora').value,
+                    origem: origemFinal,
+                    destino: destinoFinal,
+                    material: materialFinal,
+                    pesoEstimado: document.getElementById('pesoEstimado').value,
+                    pesoReal: document.getElementById('pesoReal').value,
+                    observacoes: document.getElementById('observacoes').value.trim(),
+                    fotos: selectedPhotos,
+                    fotosMateriais: selectedMaterialPhotos,
+                    fotosBoxes: selectedBoxPhotos,
+                    fotosPesagem: selectedPesagemPhotos,
+                    timestamp: Date.now(),
+                    userId: currentUser.uid
+                };
+
+                await addDoc(getExpedicoesCollection(), expedicaoData);
+                
+                // Show download confirmation instead of simple alert
+                showDownloadConfirm(expedicaoData);
+
+            } catch (error) {
+                console.error("Erro ao salvar documento: ", error);
+                showAlert('error', 'Falha no Registro', 'Ocorreu um erro ao tentar salvar no banco de dados. Tente novamente.');
+            } finally {
+                // Button state is now handled after download confirmation
+            }
+        }
+
+        function resetFormAndState() {
+            const submitBtn = document.getElementById('submit-btn');
+            const originalBtnContent = '<i class="ph ph-paper-plane-right"></i> Registrar Expedição';
+
+            document.getElementById('expedicao-form').reset();
+            ['formulado', 'origem', 'destino'].forEach(handleSelectComOpcaoOutro);
+            selectedPhotos = [];
+            selectedMaterialPhotos = [];
+            selectedBoxPhotos = [];
+            selectedPesagemPhotos = [];
+            renderPreviews('transporte');
+            renderPreviews('materiais');
+            renderPreviews('boxes');
+            renderPreviews('pesagem');
+            setDefaultDateTime();
+
+            submitBtn.innerHTML = originalBtnContent;
+            submitBtn.disabled = false;
+            submitBtn.classList.remove('opacity-75');
+        }
+
+        function showDownloadConfirm(expedicaoData) {
+            const modal = document.getElementById('download-confirm-modal');
+            const content = document.getElementById('download-confirm-modal-content');
+            const yesBtn = document.getElementById('download-confirm-yes-btn');
+            const noBtn = document.getElementById('download-confirm-no-btn');
+
+            // Clone and replace buttons to remove old event listeners
+            const newYesBtn = yesBtn.cloneNode(true);
+            yesBtn.parentNode.replaceChild(newYesBtn, yesBtn);
+
+            const newNoBtn = noBtn.cloneNode(true);
+            noBtn.parentNode.replaceChild(newNoBtn, noBtn);
+
+            newYesBtn.addEventListener('click', async () => {
+                // Show loading state on button
+                newYesBtn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Gerando PDF...';
+                newYesBtn.disabled = true;
+                newNoBtn.disabled = true;
+
+                await generateAndDownloadPDF(expedicaoData);
+                
+                closeDownloadConfirm();
+                resetFormAndState();
+            });
+
+            newNoBtn.addEventListener('click', () => {
+                closeDownloadConfirm();
+                resetFormAndState();
+            });
+
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeDownloadConfirm() {
+            const modal = document.getElementById('download-confirm-modal');
+            const content = document.getElementById('download-confirm-modal-content');
+            modal.classList.add('opacity-0');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        async function generateAndDownloadPDF(data) {
+            const { jsPDF } = window.jspdf;
+            const receiptContainer = document.getElementById('pdf-receipt-container');
+            const receiptBody = document.getElementById('pdf-receipt-body');
+            const receiptPhotos = document.getElementById('pdf-receipt-photos');
+            const receiptTimestamp = document.getElementById('pdf-receipt-timestamp');
+
+            // 1. Populate the hidden receipt structure
+            receiptTimestamp.innerText = `Gerado em: ${formatDateBR(new Date().toISOString())}`;
+            
+            receiptBody.innerHTML = `
+                <h3 class="text-lg font-bold mb-4">Detalhes da Transferência</h3>
+                <div class="grid grid-cols-3 gap-x-8 gap-y-4 text-sm">
+                    <div class="col-span-3"><strong>Material:</strong> <span class="font-normal">${data.material}</span></div>
+                    <div class="col-span-3"><strong>Responsável:</strong> <span class="font-normal">${data.responsavel}</span></div>
+                    <div><strong>Frota:</strong> <span class="font-normal">${data.frota || 'N/A'}</span></div>
+                    <div><strong>Peso Real:</strong> <span class="font-normal">${data.pesoReal} KG</span></div>
+                    <div><strong>Peso Estimado:</strong> <span class="font-normal">${data.pesoEstimado || 'N/A'} KG</span></div>
+                    <div><strong>Data/Hora:</strong> <span class="font-normal">${formatDateBR(data.dataHora)}</span></div>
+                    <div><strong>Origem:</strong> <span class="font-normal">${data.origem}</span></div>
+                    <div><strong>Destino:</strong> <span class="font-normal">${data.destino}</span></div>
+                    ${data.observacoes ? `<div class="col-span-3"><strong>Observações:</strong> <span class="font-normal italic">"${data.observacoes}"</span></div>` : ''}
+                </div>
+            `;
+
+            const createPhotoSection = (title, photos) => {
+                if (!photos || photos.length === 0) return '';
+                return `
+                    <h4 class="text-md font-bold mt-6 mb-2">${title} (${photos.length})</h4>
+                    <div class="grid grid-cols-4 gap-2">
+                        ${photos.map(p => `
+                            <div class="text-xs">
+                                <div class="border border-gray-200 rounded-md overflow-hidden"><img src="${p.src}" class="w-full h-auto object-cover"/></div>
+                                ${p.description ? `<p class="mt-1 text-center text-gray-600">${p.description}</p>` : ''}
+                            </div>`).join('')}
+                    </div>
+                `;
+            };
+
+            receiptPhotos.innerHTML = 
+                createPhotoSection('Fotos dos Ingredientes', data.fotosMateriais) +
+                createPhotoSection('Fotos dos Boxes', data.fotosBoxes) +
+                createPhotoSection('Fotos da Pesagem', data.fotosPesagem) +
+                createPhotoSection('Fotos do Transporte', data.fotos);
+
+            // 2. Use html2canvas to render the element
+            const canvas = await html2canvas(receiptContainer, { scale: 2 }); // Higher scale for better quality
+            const imgData = canvas.toDataURL('image/png');
+
+            // 3. Use jsPDF to create and save the PDF
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'px',
+                format: [canvas.width, canvas.height]
+            });
+
+            pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+            const dateForFilename = new Date().toISOString().slice(0, 10);
+            pdf.save(`comprovante-expedicao-${dateForFilename}.pdf`);
+
+            // 4. Clean up
+            receiptBody.innerHTML = '';
+            receiptPhotos.innerHTML = '';
+        }
+
+        function loadAdminData() {
+            if (!currentUser) return;
+
+            const q = query(getExpedicoesCollection());
+            
+            onSnapshot(q, (snapshot) => {
+                const adminGrid = document.getElementById('admin-grid');
+                const emptyState = document.getElementById('admin-empty-state');
+                
+                if (snapshot.empty) {
+                    adminGrid.innerHTML = '';
+                    emptyState.classList.remove('hidden');
+                    emptyState.classList.add('flex');
+                    return;
+                }
+                
+                emptyState.classList.add('hidden');
+                emptyState.classList.remove('flex');
+                
+                let expedicoes = [];
+                snapshot.forEach((docSnap) => {
+                    expedicoes.push({ id: docSnap.id, ...docSnap.data() });
+                });
+
+                expedicoes.sort((a, b) => new Date(b.dataHora) - new Date(a.dataHora));
+                
+                adminGrid.innerHTML = '';
+                expedicoes.forEach(docData => {
+                    const card = createAdminCard(docData);
+                    adminGrid.appendChild(card);
+                });
+
+            }, (error) => {
+                console.error("Erro na leitura (onSnapshot):", error);
+                showAlert('error', 'Erro de Sincronização', 'Não foi possível carregar os dados em tempo real.');
+            });
+        }
+
+        function formatDateBR(isoString) {
+            if (!isoString) return '';
+            const date = new Date(isoString);
+            return date.toLocaleString('pt-BR', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+        }
+
+        function createAdminCard(data) {
+            const div = document.createElement('div');
+            div.className = 'bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col h-full';
+            
+
+            // Header Card
+            const headerHtml = `
+                <div class="p-5 border-b border-gray-100 flex justify-between items-start bg-gray-50/50">
+                    <div>
+                        <span class="inline-block px-2.5 py-1 bg-green-100 text-atto-dark text-xs font-bold rounded-md mb-2 shadow-sm border border-green-200">
+                            ${data.material}
+                        </span>
+                        <h4 class="font-extrabold text-gray-900 text-xl tracking-tight">${data.pesoReal} KG</h4>
+                        ${data.pesoEstimado ? `
+                            <p class="text-xs text-gray-400 font-medium">Estimado: ${data.pesoEstimado} KG</p>
+                        ` : ''
+                        }
+                        <p class="text-sm text-gray-500 font-medium flex items-center gap-1 mt-1">
+                            <i class="ph ph-calendar-blank"></i> ${formatDateBR(data.dataHora)}
+                        </p>
+                    </div>
+                    <div class="flex flex-col gap-2">
+                        <button onclick='shareExpedicaoPrompt(${JSON.stringify(data).replace(/'/g, "&apos;")})' class="text-gray-400 hover:text-atto hover:bg-green-50 p-2 rounded-lg transition-colors" title="Compartilhar">
+                            <i class="ph ph-share-network text-xl"></i>
+                        </button>
+                        <button onclick="deleteExpedicaoPrompt('${data.id}')" class="text-gray-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors" title="Apagar registro">
+                            <i class="ph ph-trash text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            // Body Card
+            const bodyHtml = `
+                <div class="p-5 flex-grow">
+                    <div class="grid grid-cols-2 gap-4 text-sm mb-4">
+                        <div class="col-span-2">
+                            <span class="block text-xs text-gray-400 font-semibold uppercase">Responsável</span>
+                            <span class="font-medium text-gray-800">${data.responsavel}</span>
+                        </div>
+                        <div class="col-span-2">
+                            <span class="block text-xs text-gray-400 font-semibold uppercase">Frota</span>
+                            <span class="font-medium text-gray-800">${data.frota || 'Não informado'}</span>
+                        </div>
+                        <div>
+                            <span class="block text-xs text-gray-400 font-semibold uppercase">Origem</span>
+                            <span class="font-medium text-gray-800">${data.origem}</span>
+                        </div>
+                        <div>
+                            <span class="block text-xs text-gray-400 font-semibold uppercase">Destino</span>
+                            <span class="font-medium text-gray-800">${data.destino}</span>
+                        </div>
+                    </div>
+                    ${data.observacoes ? `
+                    <div class="mb-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                        <span class="block text-xs text-gray-400 font-semibold uppercase mb-1">Observações</span>
+                        <p class="text-gray-700 text-sm italic">"${data.observacoes}"</p>
+                    </div>
+                    ` : ''}
+                    
+                    <span class="block text-xs text-gray-400 font-semibold uppercase mb-2 mt-4">Fotos dos Ingredientes (${data.fotosMateriais ? data.fotosMateriais.length : 0})</span>
+                    <div class="flex gap-2 overflow-x-auto custom-scrollbar pb-2 -mx-1 px-1">
+                        ${(data.fotosMateriais || []).map(photoBase => `
+                            <div class="flex-shrink-0 w-20 text-center">
+                                <div class="w-20 h-20 rounded-lg overflow-hidden border border-gray-200 shadow-sm cursor-pointer hover:opacity-80 transition-opacity" onclick="openPhotoViewer('${photoBase.src}')">
+                                    <img src="${photoBase.src}" class="w-full h-full object-cover">
+                                </div>
+                                <p class="text-xs text-gray-500 mt-1 truncate" title="${photoBase.description}">${photoBase.description || ''}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <span class="block text-xs text-gray-400 font-semibold uppercase mb-2 mt-4">Fotos dos Boxes (${data.fotosBoxes ? data.fotosBoxes.length : 0})</span>
+                    <div class="flex gap-2 overflow-x-auto custom-scrollbar pb-2 -mx-1 px-1">
+                        ${(data.fotosBoxes || []).map(photoBase => `
+                            <div class="flex-shrink-0 w-20 text-center">
+                                <div class="w-20 h-20 rounded-lg overflow-hidden border border-gray-200 shadow-sm cursor-pointer hover:opacity-80 transition-opacity" onclick="openPhotoViewer('${photoBase.src}')">
+                                    <img src="${photoBase.src}" class="w-full h-full object-cover">
+                                </div>
+                                <p class="text-xs text-gray-500 mt-1 truncate" title="${photoBase.description}">${photoBase.description || ''}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <span class="block text-xs text-gray-400 font-semibold uppercase mb-2 mt-4">Fotos da Pesagem (${data.fotosPesagem ? data.fotosPesagem.length : 0})</span>
+                    <div class="flex gap-2 overflow-x-auto custom-scrollbar pb-2 -mx-1 px-1">
+                        ${(data.fotosPesagem || []).map(photoBase => `
+                            <div class="flex-shrink-0 w-20 text-center">
+                                <div class="w-20 h-20 rounded-lg overflow-hidden border border-gray-200 shadow-sm cursor-pointer hover:opacity-80 transition-opacity" onclick="openPhotoViewer('${photoBase.src}')">
+                                    <img src="${photoBase.src}" class="w-full h-full object-cover">
+                                </div>
+                                <p class="text-xs text-gray-500 mt-1 truncate" title="${photoBase.description}">${photoBase.description || ''}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <span class="block text-xs text-gray-400 font-semibold uppercase mb-2 mt-4">Evidências do Transporte (${data.fotos ? data.fotos.length : 0})</span>
+                    <div class="flex gap-2 overflow-x-auto custom-scrollbar pb-2 -mx-1 px-1">
+                        ${(data.fotos || []).map(photoBase => `
+                            <div class="flex-shrink-0 w-20 text-center">
+                                <div class="w-20 h-20 rounded-lg overflow-hidden border border-gray-200 shadow-sm cursor-pointer hover:opacity-80 transition-opacity" onclick="openPhotoViewer('${photoBase.src}')">
+                                    <img src="${photoBase.src}" class="w-full h-full object-cover">
+                                </div>
+                                <p class="text-xs text-gray-500 mt-1 truncate" title="${photoBase.description}">${photoBase.description || ''}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            div.innerHTML = headerHtml + bodyHtml;
+            return div;
+        }
+
+        // Delete Logic
+        function deleteExpedicaoPrompt(docId) {
+            showConfirm(async () => {
+                try {
+                    if (!currentUser) return;
+                    await deleteDoc(getExpedicaoDoc(docId));
+                } catch (error) {
+                    console.error("Erro ao deletar:", error);
+                    showAlert('error', 'Erro', 'Falha ao tentar excluir o registro.');
+                }
+            });
+        }
+
+        // Initialization
+        window.onload = () => {
+            setDefaultDateTime();
+            setupDragAndDrop('transporte');
+            setupDragAndDrop('materiais');
+            setupDragAndDrop('boxes');
+            setupDragAndDrop('pesagem');
+            initAuth(); // Kicks off Firebase setup
+        };
+
+    </script>
+</body>
+</html>
